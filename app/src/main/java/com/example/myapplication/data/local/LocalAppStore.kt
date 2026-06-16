@@ -149,6 +149,14 @@ class LocalAppStore(context: Context) {
 
     fun list(screen: AppScreen): List<RentalItem> = itemsObject().optJSONArray(screen.name)?.toItems().orEmpty()
 
+    fun list(screen: AppScreen, session: UserSession?): List<RentalItem> {
+        val items = list(screen)
+        return when (session?.role) {
+            UserRole.NguoiDung -> filterTenantItems(screen, items, session.username)
+            else -> items
+        }
+    }
+
     fun upsert(screen: AppScreen, item: RentalItem): RentalItem {
         val items = itemsObject()
         val array = items.optJSONArray(screen.name) ?: JSONArray()
@@ -178,6 +186,121 @@ class LocalAppStore(context: Context) {
         val prefix = screen.shortCode.filter { it.isLetterOrDigit() }.ifBlank { "ID" }
         val next = list(screen).size + 1
         return "$prefix${next.toString().padStart(3, '0')}"
+    }
+
+    fun createRentRequest(roomId: String, session: UserSession, duration: String, note: String): RentalItem {
+        val room = list(AppScreen.Rooms).firstOrNull { it.id == roomId } ?: error("Không tìm thấy phòng.")
+        require(room.status.equals("Còn trống", true)) { "Phòng này hiện không còn trống." }
+        val exists = list(AppScreen.RentRequests).any {
+            it.detail("roomId") == roomId &&
+                it.detail("tenantUsername").equals(session.username, true) &&
+                it.status.contains("Chờ", true)
+        }
+        require(!exists) { "Bạn đã có yêu cầu thuê phòng này đang chờ xử lý." }
+        val request = RentalItem(
+            id = nextId(AppScreen.RentRequests),
+            title = "${session.displayName} muốn thuê ${room.title}",
+            status = "Chờ duyệt",
+            value = duration.ifBlank { "6 tháng" },
+            note = note.ifBlank { "Yêu cầu được gửi từ ứng dụng mobile." },
+            details = listOf(
+                "tenantUsername" to session.username,
+                "tenantName" to session.displayName,
+                "roomId" to room.id,
+                "roomName" to room.title
+            )
+        )
+        upsert(AppScreen.RentRequests, request)
+        upsert(
+            AppScreen.Notices,
+            RentalItem(
+                id = nextId(AppScreen.Notices),
+                title = "Yêu cầu thuê mới từ ${session.displayName}",
+                status = "Mới",
+                value = "Yêu cầu thuê",
+                note = "${session.displayName} muốn thuê ${room.title}",
+                details = listOf("targetRole" to UserRole.ChuTro.name, "requestId" to request.id)
+            )
+        )
+        return request
+    }
+
+    fun decideRentRequest(requestId: String, approve: Boolean, session: UserSession): RentalItem {
+        val request = list(AppScreen.RentRequests).firstOrNull { it.id == requestId } ?: error("Không tìm thấy yêu cầu thuê.")
+        require(request.status.contains("Chờ", true)) { "Yêu cầu này đã được xử lý." }
+        val nextRequest = request.copy(
+            status = if (approve) "Đã duyệt" else "Từ chối",
+            note = if (approve) "${request.note}\nĐã duyệt bởi ${session.displayName}." else "${request.note}\nĐã từ chối bởi ${session.displayName}."
+        )
+        upsert(AppScreen.RentRequests, nextRequest)
+        if (!approve) return nextRequest
+
+        val roomId = request.detail("roomId")
+        val room = list(AppScreen.Rooms).firstOrNull { it.id == roomId } ?: error("Không tìm thấy phòng trong yêu cầu.")
+        val contract = RentalItem(
+            id = nextId(AppScreen.Contracts),
+            title = "Hợp đồng ${room.title} - ${request.detail("tenantName").ifBlank { request.detail("tenantUsername") }}",
+            status = "Chờ người thuê xác nhận",
+            value = request.value,
+            note = "Tạo từ yêu cầu ${request.id}. Người thuê cần xác nhận để hoàn tất.",
+            details = listOf(
+                "requestId" to request.id,
+                "tenantUsername" to request.detail("tenantUsername"),
+                "tenantName" to request.detail("tenantName"),
+                "roomId" to room.id,
+                "roomName" to room.title
+            )
+        )
+        upsert(AppScreen.Contracts, contract)
+        upsert(
+            AppScreen.Notices,
+            RentalItem(
+                id = nextId(AppScreen.Notices),
+                title = "Hợp đồng đang chờ xác nhận",
+                status = "Mới",
+                value = "Hợp đồng",
+                note = "Yêu cầu thuê ${room.title} đã được duyệt. Vui lòng xác nhận hợp đồng.",
+                details = listOf("targetUser" to request.detail("tenantUsername"), "contractId" to contract.id)
+            )
+        )
+        return nextRequest
+    }
+
+    fun confirmContract(contractId: String, approve: Boolean, session: UserSession): RentalItem {
+        val contract = list(AppScreen.Contracts).firstOrNull { it.id == contractId } ?: error("Không tìm thấy hợp đồng.")
+        require(contract.detail("tenantUsername").equals(session.username, true)) { "Bạn chỉ được xác nhận hợp đồng của mình." }
+        require(contract.status == "Chờ người thuê xác nhận") { "Hợp đồng này không còn chờ xác nhận." }
+        val nextContract = contract.copy(
+            status = if (approve) "Đang hiệu lực" else "Người thuê từ chối",
+            note = if (approve) "${contract.note}\nNgười thuê đã xác nhận." else "${contract.note}\nNgười thuê đã từ chối."
+        )
+        upsert(AppScreen.Contracts, nextContract)
+        if (!approve) return nextContract
+
+        val roomId = contract.detail("roomId")
+        val room = list(AppScreen.Rooms).firstOrNull { it.id == roomId } ?: error("Không tìm thấy phòng trong hợp đồng.")
+        upsert(
+            AppScreen.Rooms,
+            room.copy(
+                status = "Đã thuê",
+                note = "${room.note}\nĐang thuê bởi ${session.displayName}."
+            )
+        )
+        val tenantExists = list(AppScreen.Tenants).any { it.detail("tenantUsername").equals(session.username, true) }
+        if (!tenantExists) {
+            upsert(
+                AppScreen.Tenants,
+                RentalItem(
+                    id = nextId(AppScreen.Tenants),
+                    title = session.displayName,
+                    status = "Đang thuê",
+                    value = session.username,
+                    note = "Thuê ${room.title}",
+                    details = listOf("tenantUsername" to session.username, "roomId" to room.id, "contractId" to contract.id)
+                )
+            )
+        }
+        return nextContract
     }
 
     private fun seedIfNeeded() {
@@ -240,7 +363,25 @@ class LocalAppStore(context: Context) {
     private fun saveUsers(users: JSONArray) = prefs.edit().putString("users", users.toString()).apply()
     private fun saveItems(items: JSONObject) = prefs.edit().putString("items", items.toString()).apply()
     private fun findUser(username: String): JSONObject? = usersArray().objects().firstOrNull { it.optString("username").equals(username, true) }
+
+    private fun filterTenantItems(screen: AppScreen, items: List<RentalItem>, username: String): List<RentalItem> = when (screen) {
+        AppScreen.Rooms -> items.filter { it.status.equals("Còn trống", true) || it.detail("tenantUsername").equals(username, true) }
+        AppScreen.Houses, AppScreen.RoomTypes, AppScreen.Services, AppScreen.Notices -> items.filter {
+            it.detail("targetUser").isBlank() || it.detail("targetUser").equals(username, true)
+        }
+        AppScreen.Contracts, AppScreen.Invoices, AppScreen.Payments, AppScreen.ServiceRegs,
+        AppScreen.Electric, AppScreen.Water, AppScreen.RentRequests, AppScreen.RenewRequests,
+        AppScreen.Incidents, AppScreen.Tenants -> items.filter {
+            it.detail("tenantUsername").equals(username, true) ||
+                it.note.contains(username, true) ||
+                it.value.equals(username, true)
+        }
+        AppScreen.Users -> emptyList()
+        else -> items
+    }
 }
+
+private fun RentalItem.detail(key: String): String = details.firstOrNull { it.first == key }?.second.orEmpty()
 
 private fun JSONObject.toSession(): UserSession = UserSession(
     token = "local:${optString("username")}:${System.currentTimeMillis()}",

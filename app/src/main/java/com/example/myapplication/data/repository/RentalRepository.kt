@@ -55,7 +55,7 @@ class RentalRepository(context: Context) {
     }
 
     suspend fun list(screen: AppScreen, session: UserSession?): UiState<List<RentalItem>> {
-        val items = store.list(screen)
+        val items = store.list(screen, session)
         return if (items.isEmpty()) {
             UiState.Empty("Chưa có dữ liệu ${screen.label.lowercase()}.")
         } else {
@@ -63,13 +63,30 @@ class RentalRepository(context: Context) {
         }
     }
 
-    suspend fun saveItem(screen: AppScreen, item: RentalItem): Result<RentalItem> = runCatching {
+    suspend fun saveItem(screen: AppScreen, item: RentalItem, session: UserSession?): Result<RentalItem> = runCatching {
+        require(canManage(session?.role, screen)) { "Tài khoản này không có quyền sửa ${screen.label.lowercase()}." }
         val id = item.id.ifBlank { store.nextId(screen) }
         store.upsert(screen, item.copy(id = id))
     }
 
-    suspend fun deleteItem(screen: AppScreen, id: String): Result<Unit> = runCatching {
+    suspend fun deleteItem(screen: AppScreen, id: String, session: UserSession?): Result<Unit> = runCatching {
+        require(canManage(session?.role, screen)) { "Tài khoản này không có quyền xóa ${screen.label.lowercase()}." }
         store.delete(screen, id)
+    }
+
+    suspend fun requestRoom(roomId: String, session: UserSession?, duration: String, note: String): Result<RentalItem> = runCatching {
+        require(session?.role == UserRole.NguoiDung) { "Chỉ Người thuê được gửi yêu cầu thuê phòng." }
+        store.createRentRequest(roomId, session, duration, note)
+    }
+
+    suspend fun decideRentRequest(requestId: String, approve: Boolean, session: UserSession?): Result<RentalItem> = runCatching {
+        require(session?.role == UserRole.Admin || session?.role == UserRole.ChuTro) { "Chỉ Admin hoặc Chủ trọ được duyệt yêu cầu thuê." }
+        store.decideRentRequest(requestId, approve, session)
+    }
+
+    suspend fun confirmContract(contractId: String, approve: Boolean, session: UserSession?): Result<RentalItem> = runCatching {
+        require(session?.role == UserRole.NguoiDung) { "Chỉ Người thuê được xác nhận hợp đồng của mình." }
+        store.confirmContract(contractId, approve, session)
     }
 
     fun demoSession(roleName: String): UserSession {
@@ -81,5 +98,33 @@ class RentalRepository(context: Context) {
         }
         val password = if (role == UserRole.Admin) "Admin123" else "123456"
         return store.login(username, password, role)
+    }
+
+    private fun canManage(role: UserRole?, screen: AppScreen): Boolean = when (role) {
+        UserRole.Admin -> screen != AppScreen.Account
+        UserRole.ChuTro -> screen in setOf(
+            AppScreen.Houses,
+            AppScreen.RoomTypes,
+            AppScreen.Rooms,
+            AppScreen.Tenants,
+            AppScreen.Contracts,
+            AppScreen.Invoices,
+            AppScreen.Payments,
+            AppScreen.Services,
+            AppScreen.ServiceRegs,
+            AppScreen.Electric,
+            AppScreen.Water,
+            AppScreen.RentRequests,
+            AppScreen.RenewRequests,
+            AppScreen.Incidents,
+            AppScreen.Notices
+        )
+        UserRole.NguoiDung -> screen in setOf(
+            AppScreen.RentRequests,
+            AppScreen.RenewRequests,
+            AppScreen.Payments,
+            AppScreen.Incidents
+        )
+        null -> false
     }
 }

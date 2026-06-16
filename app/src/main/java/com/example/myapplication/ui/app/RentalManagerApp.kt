@@ -447,7 +447,10 @@ private fun ModuleScreen(repository: RentalRepository, session: UserSession?, sc
     var status by remember(screen) { mutableStateOf("Tất cả") }
     var selected by remember { mutableStateOf<RentalItem?>(null) }
     var editing by remember { mutableStateOf<RentalItem?>(null) }
+    var rentRequestRoom by remember { mutableStateOf<RentalItem?>(null) }
     var actionError by remember { mutableStateOf<String?>(null) }
+    val role = session?.role ?: UserRole.NguoiDung
+    val canManage = canManageScreen(role, screen)
 
     fun load() {
         state = UiState.Loading
@@ -472,7 +475,7 @@ private fun ModuleScreen(repository: RentalRepository, session: UserSession?, sc
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
             item { ModuleHeader(screen, items.size, source) }
-            item {
+            if (canManage) item {
                 Button(
                     onClick = {
                         actionError = null
@@ -502,22 +505,59 @@ private fun ModuleScreen(repository: RentalRepository, session: UserSession?, sc
                 item { EmptyState("Không tìm thấy dữ liệu phù hợp.") }
             } else {
                 items(filtered, key = { it.id }) { item ->
-                    RentalListCard(
-                        item = item,
-                        onOpen = { selected = item },
-                        onEdit = {
-                            actionError = null
-                            editing = item
-                        },
-                        onDelete = {
-                            actionError = null
-                            scope.launch {
-                                repository.deleteItem(screen, item.id)
-                                    .onSuccess { load() }
-                                    .onFailure { actionError = it.message ?: "Không thể xóa dữ liệu." }
+                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        RentalListCard(
+                            item = item,
+                            canManage = canManage,
+                            onOpen = { selected = item },
+                            onEdit = {
+                                actionError = null
+                                editing = item
+                            },
+                            onDelete = {
+                                actionError = null
+                                scope.launch {
+                                    repository.deleteItem(screen, item.id, session)
+                                        .onSuccess { load() }
+                                        .onFailure { actionError = it.message ?: "Không thể xóa dữ liệu." }
+                                }
                             }
-                        }
-                    )
+                        )
+                        ModuleActionBar(
+                            screen = screen,
+                            item = item,
+                            role = role,
+                            onRentRoom = { rentRequestRoom = item },
+                            onApproveRequest = {
+                                scope.launch {
+                                    repository.decideRentRequest(item.id, approve = true, session = session)
+                                        .onSuccess { load() }
+                                        .onFailure { actionError = it.message ?: "Không thể duyệt yêu cầu." }
+                                }
+                            },
+                            onRejectRequest = {
+                                scope.launch {
+                                    repository.decideRentRequest(item.id, approve = false, session = session)
+                                        .onSuccess { load() }
+                                        .onFailure { actionError = it.message ?: "Không thể từ chối yêu cầu." }
+                                }
+                            },
+                            onConfirmContract = {
+                                scope.launch {
+                                    repository.confirmContract(item.id, approve = true, session = session)
+                                        .onSuccess { load() }
+                                        .onFailure { actionError = it.message ?: "Không thể xác nhận hợp đồng." }
+                                }
+                            },
+                            onRejectContract = {
+                                scope.launch {
+                                    repository.confirmContract(item.id, approve = false, session = session)
+                                        .onSuccess { load() }
+                                        .onFailure { actionError = it.message ?: "Không thể từ chối hợp đồng." }
+                                }
+                            }
+                        )
+                    }
                 }
             }
         }
@@ -535,12 +575,30 @@ private fun ModuleScreen(repository: RentalRepository, session: UserSession?, sc
             onSave = { next ->
                 actionError = null
                 scope.launch {
-                    repository.saveItem(screen, next)
+                    repository.saveItem(screen, next, session)
                         .onSuccess {
                             editing = null
                             load()
                         }
                         .onFailure { actionError = it.message ?: "Không thể lưu dữ liệu." }
+                }
+            }
+        )
+    }
+
+    rentRequestRoom?.let { room ->
+        RentRequestDialog(
+            room = room,
+            onDismiss = { rentRequestRoom = null },
+            onSubmit = { duration, note ->
+                actionError = null
+                scope.launch {
+                    repository.requestRoom(room.id, session, duration, note)
+                        .onSuccess {
+                            rentRequestRoom = null
+                            load()
+                        }
+                        .onFailure { actionError = it.message ?: "Không thể gửi yêu cầu thuê phòng." }
                 }
             }
         )
@@ -1031,7 +1089,7 @@ private fun SearchPanel(query: String, onQueryChange: (String) -> Unit, statuses
 }
 
 @Composable
-private fun RentalListCard(item: RentalItem, onOpen: () -> Unit, onEdit: () -> Unit, onDelete: () -> Unit) {
+private fun RentalListCard(item: RentalItem, canManage: Boolean, onOpen: () -> Unit, onEdit: () -> Unit, onDelete: () -> Unit) {
     Card(modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(8.dp), colors = CardDefaults.cardColors(containerColor = Color.White), border = BorderStroke(1.dp, Color(0xFFE2E8F0))) {
         Column(modifier = Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
@@ -1063,19 +1121,21 @@ private fun RentalListCard(item: RentalItem, onOpen: () -> Unit, onEdit: () -> U
                 ) {
                     Text("Chi tiết", color = Color.White, fontWeight = FontWeight.Bold)
                 }
-                OutlinedButton(
-                    onClick = onEdit,
-                    shape = RoundedCornerShape(8.dp),
-                    modifier = Modifier.weight(1f).height(46.dp)
-                ) {
-                    Text("Sửa", fontWeight = FontWeight.Bold)
-                }
-                OutlinedButton(
-                    onClick = onDelete,
-                    shape = RoundedCornerShape(8.dp),
-                    modifier = Modifier.weight(1f).height(46.dp)
-                ) {
-                    Text("Xóa", color = Color(0xFFDC2626), fontWeight = FontWeight.Bold)
+                if (canManage) {
+                    OutlinedButton(
+                        onClick = onEdit,
+                        shape = RoundedCornerShape(8.dp),
+                        modifier = Modifier.weight(1f).height(46.dp)
+                    ) {
+                        Text("Sửa", fontWeight = FontWeight.Bold)
+                    }
+                    OutlinedButton(
+                        onClick = onDelete,
+                        shape = RoundedCornerShape(8.dp),
+                        modifier = Modifier.weight(1f).height(46.dp)
+                    ) {
+                        Text("Xóa", color = Color(0xFFDC2626), fontWeight = FontWeight.Bold)
+                    }
                 }
             }
         }
@@ -1087,6 +1147,123 @@ private fun StatusPill(status: String) {
     Surface(color = statusColor(status).copy(alpha = 0.12f), shape = RoundedCornerShape(8.dp), border = BorderStroke(1.dp, statusColor(status).copy(alpha = 0.18f))) {
         Text(status, color = statusColor(status), modifier = Modifier.padding(horizontal = 9.dp, vertical = 5.dp), style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.SemiBold)
     }
+}
+
+@Composable
+private fun ModuleActionBar(
+    screen: AppScreen,
+    item: RentalItem,
+    role: UserRole,
+    onRentRoom: () -> Unit,
+    onApproveRequest: () -> Unit,
+    onRejectRequest: () -> Unit,
+    onConfirmContract: () -> Unit,
+    onRejectContract: () -> Unit
+) {
+    val showRent = role == UserRole.NguoiDung && screen == AppScreen.Rooms && item.status.equals("Còn trống", true)
+    val showDecision = role != UserRole.NguoiDung && screen == AppScreen.RentRequests && item.status.contains("Chờ", true)
+    val showConfirm = role == UserRole.NguoiDung && screen == AppScreen.Contracts && item.status == "Chờ người thuê xác nhận"
+    if (!showRent && !showDecision && !showConfirm) return
+
+    Surface(
+        shape = RoundedCornerShape(8.dp),
+        color = Color.White,
+        border = BorderStroke(1.dp, Color(0xFFD1FAE5)),
+        shadowElevation = 2.dp
+    ) {
+        Row(
+            modifier = Modifier.fillMaxWidth().padding(10.dp),
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            if (showRent) {
+                Button(
+                    onClick = onRentRoom,
+                    shape = RoundedCornerShape(8.dp),
+                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF0F766E)),
+                    modifier = Modifier.fillMaxWidth().height(46.dp)
+                ) {
+                    Text("Gửi yêu cầu thuê", color = Color.White, fontWeight = FontWeight.Bold)
+                }
+            }
+            if (showDecision) {
+                Button(
+                    onClick = onApproveRequest,
+                    shape = RoundedCornerShape(8.dp),
+                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF059669)),
+                    modifier = Modifier.weight(1f).height(46.dp)
+                ) {
+                    Text("Duyệt", color = Color.White, fontWeight = FontWeight.Bold)
+                }
+                OutlinedButton(
+                    onClick = onRejectRequest,
+                    shape = RoundedCornerShape(8.dp),
+                    modifier = Modifier.weight(1f).height(46.dp)
+                ) {
+                    Text("Từ chối", color = Color(0xFFDC2626), fontWeight = FontWeight.Bold)
+                }
+            }
+            if (showConfirm) {
+                Button(
+                    onClick = onConfirmContract,
+                    shape = RoundedCornerShape(8.dp),
+                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF059669)),
+                    modifier = Modifier.weight(1f).height(46.dp)
+                ) {
+                    Text("Xác nhận", color = Color.White, fontWeight = FontWeight.Bold)
+                }
+                OutlinedButton(
+                    onClick = onRejectContract,
+                    shape = RoundedCornerShape(8.dp),
+                    modifier = Modifier.weight(1f).height(46.dp)
+                ) {
+                    Text("Từ chối", color = Color(0xFFDC2626), fontWeight = FontWeight.Bold)
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun RentRequestDialog(room: RentalItem, onDismiss: () -> Unit, onSubmit: (String, String) -> Unit) {
+    var duration by remember(room) { mutableStateOf("6 tháng") }
+    var note by remember(room) { mutableStateOf("Mình muốn thuê phòng này.") }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Gửi yêu cầu thuê") },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                DetailRow("Phòng", room.title)
+                DetailRow("Giá", room.value)
+                OutlinedTextField(
+                    value = duration,
+                    onValueChange = { duration = it },
+                    label = { Text("Thời hạn mong muốn") },
+                    modifier = Modifier.fillMaxWidth(),
+                    singleLine = true,
+                    shape = RoundedCornerShape(8.dp)
+                )
+                OutlinedTextField(
+                    value = note,
+                    onValueChange = { note = it },
+                    label = { Text("Ghi chú") },
+                    modifier = Modifier.fillMaxWidth(),
+                    minLines = 2,
+                    shape = RoundedCornerShape(8.dp)
+                )
+            }
+        },
+        confirmButton = {
+            Button(
+                onClick = { onSubmit(duration, note) },
+                shape = RoundedCornerShape(8.dp),
+                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF0F766E))
+            ) {
+                Text("Gửi yêu cầu")
+            }
+        },
+        dismissButton = { TextButton(onClick = onDismiss) { Text("Hủy") } }
+    )
 }
 
 @Composable
@@ -1221,6 +1398,28 @@ private fun screensForRole(role: UserRole): List<AppScreen> = when (role) {
 private fun bottomScreens(role: UserRole): List<AppScreen> = when (role) {
     UserRole.NguoiDung -> listOf(AppScreen.Dashboard, AppScreen.Rooms, AppScreen.Invoices, AppScreen.Notices, AppScreen.Account)
     else -> listOf(AppScreen.Dashboard, AppScreen.Rooms, AppScreen.Invoices, AppScreen.Payments, AppScreen.Account)
+}
+
+private fun canManageScreen(role: UserRole, screen: AppScreen): Boolean = when (role) {
+    UserRole.Admin -> screen != AppScreen.Account
+    UserRole.ChuTro -> screen in setOf(
+        AppScreen.Houses,
+        AppScreen.RoomTypes,
+        AppScreen.Rooms,
+        AppScreen.Tenants,
+        AppScreen.Contracts,
+        AppScreen.Invoices,
+        AppScreen.Payments,
+        AppScreen.Services,
+        AppScreen.ServiceRegs,
+        AppScreen.Electric,
+        AppScreen.Water,
+        AppScreen.RentRequests,
+        AppScreen.RenewRequests,
+        AppScreen.Incidents,
+        AppScreen.Notices
+    )
+    UserRole.NguoiDung -> false
 }
 
 private fun sourceLabel(source: DataSource): String = when (source) {
