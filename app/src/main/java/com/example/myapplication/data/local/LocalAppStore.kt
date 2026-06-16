@@ -1,0 +1,292 @@
+package com.example.myapplication.data.local
+
+import android.content.Context
+import android.util.Base64
+import com.example.myapplication.domain.model.AccountProfile
+import com.example.myapplication.domain.model.AppScreen
+import com.example.myapplication.domain.model.DashboardSummary
+import com.example.myapplication.domain.model.RentalItem
+import com.example.myapplication.domain.model.UserRole
+import com.example.myapplication.domain.model.UserSession
+import com.example.myapplication.domain.util.moneyValue
+import org.json.JSONArray
+import org.json.JSONObject
+
+class LocalAppStore(context: Context) {
+    private val prefs = context.getSharedPreferences("rental_local_store", Context.MODE_PRIVATE)
+
+    init {
+        seedIfNeeded()
+    }
+
+    fun login(usernameOrEmail: String, password: String, role: UserRole): UserSession {
+        val user = usersArray().objects().firstOrNull {
+            val matchIdentity = it.optString("username").equals(usernameOrEmail, true) ||
+                it.optString("email").equals(usernameOrEmail, true)
+            matchIdentity && it.optString("password") == password && it.optString("role") == role.name
+        } ?: error("Sai tài khoản, mật khẩu hoặc vai trò.")
+        return user.toSession()
+    }
+
+    fun register(payload: JSONObject): String {
+        val username = payload.optString("tenDangNhap").trim()
+        val email = payload.optString("email").trim()
+        val password = payload.optString("matKhau")
+        val confirmPassword = payload.optString("xacNhanMatKhau", password)
+        val role = UserRole.from(payload.optString("vaiTro"))
+        require(username.isNotBlank()) { "Tên đăng nhập không được để trống." }
+        require(email.isNotBlank()) { "Email không được để trống." }
+        require(password.length >= 6) { "Mật khẩu phải có ít nhất 6 ký tự." }
+        require(password == confirmPassword) { "Mật khẩu nhập lại không khớp." }
+        val users = usersArray()
+        require(users.objects().none { it.optString("username").equals(username, true) || it.optString("email").equals(email, true) }) {
+            "Tên đăng nhập hoặc email đã tồn tại."
+        }
+        val nextId = users.length() + 1
+        users.put(
+            JSONObject()
+                .put("id", nextId)
+                .put("username", username)
+                .put("password", password)
+                .put("role", role.name)
+                .put("fullName", payload.optString("hoTen").ifBlank { username })
+                .put("email", email)
+                .put("phone", payload.optString("soDienThoai"))
+                .put("cccd", payload.optString("cccd"))
+                .put("cccdFrontUrl", payload.optString("anhCccdMatTruoc"))
+                .put("cccdBackUrl", payload.optString("anhCccdMatSau"))
+                .put("address", "")
+                .put("workplace", "")
+                .put("bankName", "")
+                .put("bankAccount", "")
+                .put("bankOwner", "")
+                .put("transferContent", "")
+        )
+        saveUsers(users)
+        addUserListItem(nextId, username, role, email)
+        return "Đăng ký thành công. Bạn có thể đăng nhập bằng tài khoản vừa tạo."
+    }
+
+    fun forgotPassword(email: String): String {
+        val users = usersArray()
+        val user = users.objects().firstOrNull { it.optString("email").equals(email, true) }
+        if (user != null) {
+            val token = "123456"
+            user.put("resetToken", token)
+            saveUsers(users)
+        }
+        return "Nếu email tồn tại, mã đặt lại trong bản local là 123456."
+    }
+
+    fun resetPassword(email: String, token: String, newPassword: String, confirmPassword: String): String {
+        require(newPassword == confirmPassword) { "Mật khẩu nhập lại không khớp." }
+        require(newPassword.length >= 6) { "Mật khẩu mới phải có ít nhất 6 ký tự." }
+        val users = usersArray()
+        val user = users.objects().firstOrNull { it.optString("email").equals(email, true) } ?: error("Email không tồn tại.")
+        require(user.optString("resetToken") == token) { "Mã OTP/Token không đúng." }
+        user.put("password", newPassword).remove("resetToken")
+        saveUsers(users)
+        return "Đặt lại mật khẩu thành công."
+    }
+
+    fun account(session: UserSession): AccountProfile {
+        val user = findUser(session.username) ?: error("Không tìm thấy tài khoản.")
+        return user.toProfile()
+    }
+
+    fun updateAccount(session: UserSession, profile: AccountProfile): AccountProfile {
+        val users = usersArray()
+        val user = users.objects().firstOrNull { it.optString("username").equals(session.username, true) } ?: error("Không tìm thấy tài khoản.")
+        user.put("fullName", profile.fullName)
+            .put("email", profile.email)
+            .put("phone", profile.phone)
+            .put("cccd", profile.cccd)
+            .put("dateOfBirth", profile.dateOfBirth)
+            .put("gender", profile.gender)
+            .put("nationality", profile.nationality)
+            .put("address", profile.address)
+            .put("workplace", profile.workplace)
+            .put("cccdFrontUrl", profile.cccdFrontUrl)
+            .put("cccdBackUrl", profile.cccdBackUrl)
+            .put("bankName", profile.bankName)
+            .put("bankCode", profile.bankCode)
+            .put("bankAccount", profile.bankAccount)
+            .put("bankOwner", profile.bankOwner)
+            .put("transferContent", profile.transferContent)
+        saveUsers(users)
+        return user.toProfile()
+    }
+
+    fun changePassword(session: UserSession, oldPassword: String, newPassword: String, confirmPassword: String): String {
+        require(newPassword == confirmPassword) { "Mật khẩu nhập lại không khớp." }
+        val users = usersArray()
+        val user = users.objects().firstOrNull { it.optString("username").equals(session.username, true) } ?: error("Không tìm thấy tài khoản.")
+        require(user.optString("password") == oldPassword) { "Mật khẩu cũ không đúng." }
+        user.put("password", newPassword)
+        saveUsers(users)
+        return "Đổi mật khẩu thành công."
+    }
+
+    fun saveImage(fileName: String, mimeType: String, bytes: ByteArray): String {
+        return "data:$mimeType;base64,${Base64.encodeToString(bytes, Base64.NO_WRAP)}"
+    }
+
+    fun dashboard(): DashboardSummary {
+        val rooms = list(AppScreen.Rooms)
+        val invoices = list(AppScreen.Invoices)
+        val payments = list(AppScreen.Payments)
+        val pending = list(AppScreen.RentRequests).count { it.status.contains("Chờ", true) } +
+            list(AppScreen.RenewRequests).count { it.status.contains("Chờ", true) } +
+            payments.count { it.status.contains("Chờ", true) }
+        return DashboardSummary(
+            totalRooms = rooms.size,
+            emptyRooms = rooms.count { it.status == "Còn trống" },
+            unpaidInvoices = invoices.count { it.status != "Đã thanh toán" },
+            pendingTasks = pending,
+            revenue = payments.filter { it.status == "Đã xác nhận" }.sumOf { moneyValue(it.value) }
+        )
+    }
+
+    fun list(screen: AppScreen): List<RentalItem> = itemsObject().optJSONArray(screen.name)?.toItems().orEmpty()
+
+    fun upsert(screen: AppScreen, item: RentalItem): RentalItem {
+        val items = itemsObject()
+        val array = items.optJSONArray(screen.name) ?: JSONArray()
+        val existingIndex = array.objects().indexOfFirst { it.optString("id") == item.id }
+        val json = item.toJson()
+        if (existingIndex >= 0) {
+            array.put(existingIndex, json)
+        } else {
+            array.put(0, json)
+        }
+        items.put(screen.name, array)
+        saveItems(items)
+        return item
+    }
+
+    fun delete(screen: AppScreen, id: String) {
+        val items = itemsObject()
+        val next = JSONArray()
+        items.optJSONArray(screen.name)?.objects().orEmpty()
+            .filterNot { it.optString("id") == id }
+            .forEach { next.put(it) }
+        items.put(screen.name, next)
+        saveItems(items)
+    }
+
+    fun nextId(screen: AppScreen): String {
+        val prefix = screen.shortCode.filter { it.isLetterOrDigit() }.ifBlank { "ID" }
+        val next = list(screen).size + 1
+        return "$prefix${next.toString().padStart(3, '0')}"
+    }
+
+    private fun seedIfNeeded() {
+        if (prefs.getBoolean("seeded", false)) return
+        saveUsers(
+            JSONArray()
+                .put(seedUser(1, "Admin", "Admin123", UserRole.Admin, "Admin hệ thống", "admin@demo.local"))
+                .put(seedUser(2, "chutro", "123456", UserRole.ChuTro, "Nguyễn Minh Quân", "chutro@example.com"))
+                .put(seedUser(3, "nguoithue", "123456", UserRole.NguoiDung, "Người Thuê Demo", "nguoithue@example.com"))
+        )
+        saveItems(seedItems())
+        prefs.edit().putBoolean("seeded", true).apply()
+    }
+
+    private fun seedUser(id: Int, username: String, password: String, role: UserRole, fullName: String, email: String): JSONObject {
+        return JSONObject()
+            .put("id", id)
+            .put("username", username)
+            .put("password", password)
+            .put("role", role.name)
+            .put("fullName", fullName)
+            .put("email", email)
+            .put("phone", "")
+            .put("cccd", "")
+    }
+
+    private fun seedItems(): JSONObject {
+        val obj = JSONObject()
+        obj.put(AppScreen.Houses.name, JSONArray().put(item("NT01", "Nhà trọ An Bình", "Đang hoạt động", "20 phòng", "Quận 9, TP.HCM")))
+        obj.put(AppScreen.RoomTypes.name, JSONArray().put(item("LP01", "Phòng thường", "Đang dùng", "2.300.000đ - 3.000.000đ", "Phòng cơ bản, chi phí hợp lý")))
+        obj.put(AppScreen.Rooms.name, JSONArray()
+            .put(item("P101", "Phòng A01", "Đã thuê", "3.200.000đ/tháng", "Tầng 1 - Nhà trọ An Bình"))
+            .put(item("P102", "Phòng A02", "Còn trống", "2.750.000đ/tháng", "Sẵn sàng cho thuê")))
+        obj.put(AppScreen.Tenants.name, JSONArray().put(item("KT001", "Người Thuê Demo", "Đang thuê", "0910000001", "Phòng P101")))
+        obj.put(AppScreen.Contracts.name, JSONArray().put(item("HD001", "Hợp đồng P101", "Đang hiệu lực", "01/05/2026 - 01/05/2027", "Tiền cọc 3.200.000đ")))
+        obj.put(AppScreen.Invoices.name, JSONArray().put(item("H001", "Hóa đơn P101 kỳ 2026-05", "Chưa thanh toán", "3.815.000đ", "Tiền phòng + điện + nước")))
+        obj.put(AppScreen.Payments.name, JSONArray().put(item("TT001", "Biên lai P101", "Chờ xác nhận", "3.815.000đ", "Chờ chủ trọ xác nhận")))
+        obj.put(AppScreen.Services.name, JSONArray().put(item("DV01", "Internet", "Tính phí", "100.000đ/tháng", "Tính theo phòng")))
+        obj.put(AppScreen.ServiceRegs.name, JSONArray().put(item("DK001", "P101 dùng Internet", "Đang sử dụng", "100.000đ/tháng", "Đăng ký kỳ 2026-05")))
+        obj.put(AppScreen.Electric.name, JSONArray().put(item("D001", "Điện P101 kỳ 2026-05", "Đã ghi", "70 kWh x 3.500đ", "245.000đ")))
+        obj.put(AppScreen.Water.name, JSONArray().put(item("N001", "Nước P101 kỳ 2026-05", "Đã ghi", "6 m3 x 15.000đ", "90.000đ")))
+        obj.put(AppScreen.RentRequests.name, JSONArray().put(item("YT001", "Lê Văn Nam muốn thuê P102", "Chờ duyệt", "6 tháng", "Muốn vào ngày 10/06/2026")))
+        obj.put(AppScreen.RenewRequests.name, JSONArray().put(item("GH001", "Gia hạn hợp đồng P101", "Chờ duyệt", "Thêm 6 tháng", "Người thuê muốn giữ phòng")))
+        obj.put(AppScreen.Incidents.name, JSONArray().put(item("SC001", "Rò nước trong phòng P101", "Mới", "Rất gấp", "Người thuê vừa báo cáo")))
+        obj.put(AppScreen.Notices.name, JSONArray().put(item("TB001", "Hóa đơn tháng 05 đã được tạo", "Mới", "Hóa đơn", "Vui lòng thanh toán trước ngày 10")))
+        obj.put(AppScreen.Users.name, JSONArray()
+            .put(item("U001", "Admin hệ thống", "Admin", "admin@demo.local", "Quản lý toàn bộ hệ thống"))
+            .put(item("U002", "Nguyễn Minh Quân", "Chủ trọ", "chutro@example.com", "Chủ trọ Nhà trọ An Bình"))
+            .put(item("U003", "Người Thuê Demo", "Người thuê", "nguoithue@example.com", "Người thuê phòng P101")))
+        return obj
+    }
+
+    private fun addUserListItem(id: Int, username: String, role: UserRole, email: String) {
+        upsert(AppScreen.Users, RentalItem("U${id.toString().padStart(3, '0')}", username, role.label, email, "Tài khoản đăng ký trong app"))
+    }
+
+    private fun item(id: String, title: String, status: String, value: String, note: String): JSONObject = RentalItem(id, title, status, value, note).toJson()
+    private fun usersArray(): JSONArray = JSONArray(prefs.getString("users", "[]") ?: "[]")
+    private fun itemsObject(): JSONObject = JSONObject(prefs.getString("items", "{}") ?: "{}")
+    private fun saveUsers(users: JSONArray) = prefs.edit().putString("users", users.toString()).apply()
+    private fun saveItems(items: JSONObject) = prefs.edit().putString("items", items.toString()).apply()
+    private fun findUser(username: String): JSONObject? = usersArray().objects().firstOrNull { it.optString("username").equals(username, true) }
+}
+
+private fun JSONObject.toSession(): UserSession = UserSession(
+    token = "local:${optString("username")}:${System.currentTimeMillis()}",
+    role = UserRole.from(optString("role")),
+    displayName = optString("fullName").ifBlank { optString("username") },
+    username = optString("username")
+)
+
+private fun JSONObject.toProfile(): AccountProfile = AccountProfile(
+    userId = optInt("id"),
+    username = optString("username"),
+    fullName = optString("fullName"),
+    email = optString("email"),
+    phone = optString("phone"),
+    cccd = optString("cccd"),
+    dateOfBirth = optString("dateOfBirth"),
+    gender = optString("gender"),
+    nationality = optString("nationality"),
+    address = optString("address"),
+    workplace = optString("workplace"),
+    cccdFrontUrl = optString("cccdFrontUrl"),
+    cccdBackUrl = optString("cccdBackUrl"),
+    bankName = optString("bankName"),
+    bankCode = optString("bankCode"),
+    bankAccount = optString("bankAccount"),
+    bankOwner = optString("bankOwner"),
+    transferContent = optString("transferContent"),
+    role = UserRole.from(optString("role"))
+)
+
+private fun RentalItem.toJson(): JSONObject = JSONObject()
+    .put("id", id)
+    .put("title", title)
+    .put("status", status)
+    .put("value", value)
+    .put("note", note)
+    .put("details", JSONArray(details.map { JSONObject().put("label", it.first).put("value", it.second) }))
+
+private fun JSONObject.toRentalItem(): RentalItem = RentalItem(
+    id = optString("id"),
+    title = optString("title"),
+    status = optString("status"),
+    value = optString("value"),
+    note = optString("note"),
+    details = optJSONArray("details")?.objects().orEmpty().map { it.optString("label") to it.optString("value") }
+)
+
+private fun JSONArray.toItems(): List<RentalItem> = objects().map { it.toRentalItem() }
+private fun JSONArray.objects(): List<JSONObject> = List(length()) { index -> getJSONObject(index) }
