@@ -228,6 +228,11 @@ class LocalAppStore(context: Context) {
     fun decideRentRequest(requestId: String, approve: Boolean, session: UserSession): RentalItem {
         val request = list(AppScreen.RentRequests).firstOrNull { it.id == requestId } ?: error("Không tìm thấy yêu cầu thuê.")
         require(request.status.contains("Chờ", true)) { "Yêu cầu này đã được xử lý." }
+        val roomId = request.detail("roomId")
+        val room = list(AppScreen.Rooms).firstOrNull { it.id == roomId } ?: error("Không tìm thấy phòng trong yêu cầu.")
+        if (approve) {
+            require(room.status.equals("Còn trống", true)) { "Phòng này không còn trống nên không thể duyệt yêu cầu." }
+        }
         val nextRequest = request.copy(
             status = if (approve) "Đã duyệt" else "Từ chối",
             note = if (approve) "${request.note}\nĐã duyệt bởi ${session.displayName}." else "${request.note}\nĐã từ chối bởi ${session.displayName}."
@@ -235,8 +240,6 @@ class LocalAppStore(context: Context) {
         upsert(AppScreen.RentRequests, nextRequest)
         if (!approve) return nextRequest
 
-        val roomId = request.detail("roomId")
-        val room = list(AppScreen.Rooms).firstOrNull { it.id == roomId } ?: error("Không tìm thấy phòng trong yêu cầu.")
         val contract = RentalItem(
             id = nextId(AppScreen.Contracts),
             title = "Hợp đồng ${room.title} - ${request.detail("tenantName").ifBlank { request.detail("tenantUsername") }}",
@@ -252,6 +255,17 @@ class LocalAppStore(context: Context) {
             )
         )
         upsert(AppScreen.Contracts, contract)
+        upsert(
+            AppScreen.Rooms,
+            room.copy(
+                status = "Đang giữ chỗ",
+                note = "${room.note}\nĐang chờ ${request.detail("tenantName").ifBlank { request.detail("tenantUsername") }} xác nhận hợp đồng.",
+                details = room.details
+                    .replaceDetail("tenantUsername", request.detail("tenantUsername"))
+                    .replaceDetail("tenantName", request.detail("tenantName"))
+                    .replaceDetail("contractId", contract.id)
+            )
+        )
         upsert(
             AppScreen.Notices,
             RentalItem(
@@ -275,15 +289,31 @@ class LocalAppStore(context: Context) {
             note = if (approve) "${contract.note}\nNgười thuê đã xác nhận." else "${contract.note}\nNgười thuê đã từ chối."
         )
         upsert(AppScreen.Contracts, nextContract)
-        if (!approve) return nextContract
-
         val roomId = contract.detail("roomId")
         val room = list(AppScreen.Rooms).firstOrNull { it.id == roomId } ?: error("Không tìm thấy phòng trong hợp đồng.")
+        if (!approve) {
+            upsert(
+                AppScreen.Rooms,
+                room.copy(
+                    status = "Còn trống",
+                    note = "${room.note}\nNgười thuê đã từ chối hợp đồng ${contract.id}.",
+                    details = room.details
+                        .removeDetail("tenantUsername")
+                        .removeDetail("tenantName")
+                        .removeDetail("contractId")
+                )
+            )
+            return nextContract
+        }
         upsert(
             AppScreen.Rooms,
             room.copy(
                 status = "Đã thuê",
-                note = "${room.note}\nĐang thuê bởi ${session.displayName}."
+                note = "${room.note}\nĐang thuê bởi ${session.displayName}.",
+                details = room.details
+                    .replaceDetail("tenantUsername", session.username)
+                    .replaceDetail("tenantName", session.displayName)
+                    .replaceDetail("contractId", contract.id)
             )
         )
         val tenantExists = list(AppScreen.Tenants).any { it.detail("tenantUsername").equals(session.username, true) }
@@ -303,8 +333,179 @@ class LocalAppStore(context: Context) {
         return nextContract
     }
 
+    fun saveContract(
+        contractId: String,
+        roomId: String,
+        tenantUsername: String,
+        startDate: String,
+        endDate: String,
+        deposit: String,
+        note: String,
+        status: String,
+        session: UserSession
+    ): RentalItem {
+        val room = list(AppScreen.Rooms).firstOrNull { it.id == roomId } ?: error("Vui lòng chọn phòng hợp lệ.")
+        val tenant = usersArray().objects().firstOrNull { it.optString("username").equals(tenantUsername, true) }
+            ?: error("Không tìm thấy tài khoản người thuê.")
+        require(UserRole.from(tenant.optString("role")) == UserRole.NguoiDung) { "Tài khoản được chọn không phải Người thuê." }
+        require(startDate.isNotBlank()) { "Vui lòng nhập ngày bắt đầu." }
+        require(endDate.isNotBlank()) { "Vui lòng nhập ngày kết thúc." }
+        val id = contractId.ifBlank { nextId(AppScreen.Contracts) }
+        val existing = list(AppScreen.Contracts).firstOrNull { it.id == id }
+        val activeConflict = list(AppScreen.Contracts).any {
+            it.id != id &&
+                it.detail("roomId") == roomId &&
+                it.status in setOf("Chờ người thuê xác nhận", "Đang hiệu lực")
+        }
+        require(!activeConflict) { "Phòng này đã có hợp đồng đang hiệu lực hoặc chờ xác nhận." }
+
+        val tenantName = tenant.optString("fullName").ifBlank { tenantUsername }
+        val contract = RentalItem(
+            id = id,
+            title = "Hợp đồng ${room.title} - $tenantName",
+            status = status.ifBlank { "Chờ người thuê xác nhận" },
+            value = "$startDate - $endDate",
+            note = note.ifBlank { "Tiền cọc: $deposit" },
+            details = listOf(
+                "roomId" to room.id,
+                "roomName" to room.title,
+                "tenantUsername" to tenantUsername,
+                "tenantName" to tenantName,
+                "startDate" to startDate,
+                "endDate" to endDate,
+                "deposit" to deposit,
+                "createdBy" to session.username
+            )
+        )
+        upsert(AppScreen.Contracts, contract)
+        if (contract.status == "Chờ người thuê xác nhận") {
+            upsert(
+                AppScreen.Rooms,
+                room.copy(
+                    status = "Đang giữ chỗ",
+                    note = "${room.note}\nĐang chờ $tenantName xác nhận hợp đồng.",
+                    details = room.details
+                        .replaceDetail("tenantUsername", tenantUsername)
+                        .replaceDetail("tenantName", tenantName)
+                        .replaceDetail("contractId", contract.id)
+                    )
+            )
+        }
+        if (contract.status == "Đang hiệu lực") {
+            upsert(
+                AppScreen.Rooms,
+                room.copy(
+                    status = "Đã thuê",
+                    note = "${room.note}\nĐang thuê bởi $tenantName.",
+                    details = room.details
+                        .replaceDetail("tenantUsername", tenantUsername)
+                        .replaceDetail("tenantName", tenantName)
+                        .replaceDetail("contractId", contract.id)
+                )
+            )
+            val tenantExists = list(AppScreen.Tenants).any { it.detail("contractId") == contract.id }
+            if (!tenantExists) {
+                upsert(
+                    AppScreen.Tenants,
+                    RentalItem(
+                        id = nextId(AppScreen.Tenants),
+                        title = tenantName,
+                        status = "Đang thuê",
+                        value = tenantUsername,
+                        note = "Thuê ${room.title}",
+                        details = listOf("tenantUsername" to tenantUsername, "roomId" to room.id, "contractId" to contract.id)
+                    )
+                )
+            }
+        }
+        return contract
+    }
+
+    fun closeContract(contractId: String, cancel: Boolean, session: UserSession): RentalItem {
+        val contract = list(AppScreen.Contracts).firstOrNull { it.id == contractId } ?: error("Không tìm thấy hợp đồng.")
+        require(contract.status in setOf("Chờ người thuê xác nhận", "Đang hiệu lực")) { "Chỉ xử lý được hợp đồng đang chờ hoặc đang hiệu lực." }
+        val next = contract.copy(
+            status = if (cancel) "Đã hủy" else "Đã kết thúc",
+            note = "${contract.note}\n${if (cancel) "Đã hủy" else "Đã kết thúc"} bởi ${session.displayName}."
+        )
+        upsert(AppScreen.Contracts, next)
+        val room = list(AppScreen.Rooms).firstOrNull { it.id == contract.detail("roomId") }
+        if (room != null) {
+            upsert(
+                AppScreen.Rooms,
+                room.copy(
+                    status = "Còn trống",
+                    note = "${room.note}\nPhòng đã được mở lại sau hợp đồng ${contract.id}.",
+                    details = room.details
+                        .removeDetail("tenantUsername")
+                        .removeDetail("tenantName")
+                        .removeDetail("contractId")
+                )
+            )
+        }
+        val tenant = list(AppScreen.Tenants).firstOrNull { it.detail("contractId") == contract.id }
+        if (tenant != null) {
+            upsert(AppScreen.Tenants, tenant.copy(status = if (cancel) "Đã hủy" else "Đã rời phòng"))
+        }
+        return next
+    }
+
+    fun createRenewRequest(contractId: String, session: UserSession, newEndDate: String, note: String): RentalItem {
+        val contract = list(AppScreen.Contracts).firstOrNull { it.id == contractId } ?: error("Không tìm thấy hợp đồng.")
+        require(contract.detail("tenantUsername").equals(session.username, true)) { "Bạn chỉ được gia hạn hợp đồng của mình." }
+        require(contract.status == "Đang hiệu lực") { "Chỉ hợp đồng đang hiệu lực mới được gửi yêu cầu gia hạn." }
+        require(newEndDate.isNotBlank()) { "Vui lòng nhập ngày kết thúc mới." }
+        val exists = list(AppScreen.RenewRequests).any {
+            it.detail("contractId") == contract.id && it.status.contains("Chờ", true)
+        }
+        require(!exists) { "Hợp đồng này đã có yêu cầu gia hạn đang chờ duyệt." }
+        val request = RentalItem(
+            id = nextId(AppScreen.RenewRequests),
+            title = "Gia hạn ${contract.title}",
+            status = "Chờ duyệt",
+            value = "Đến $newEndDate",
+            note = note.ifBlank { "Người thuê muốn gia hạn hợp đồng." },
+            details = listOf(
+                "contractId" to contract.id,
+                "tenantUsername" to session.username,
+                "tenantName" to session.displayName,
+                "roomId" to contract.detail("roomId"),
+                "oldEndDate" to contract.detail("endDate"),
+                "newEndDate" to newEndDate
+            )
+        )
+        upsert(AppScreen.RenewRequests, request)
+        return request
+    }
+
+    fun decideRenewRequest(requestId: String, approve: Boolean, session: UserSession): RentalItem {
+        val request = list(AppScreen.RenewRequests).firstOrNull { it.id == requestId } ?: error("Không tìm thấy yêu cầu gia hạn.")
+        require(request.status.contains("Chờ", true)) { "Yêu cầu gia hạn này đã được xử lý." }
+        val nextRequest = request.copy(
+            status = if (approve) "Đã duyệt" else "Từ chối",
+            note = if (approve) "${request.note}\nĐã duyệt bởi ${session.displayName}." else "${request.note}\nĐã từ chối bởi ${session.displayName}."
+        )
+        upsert(AppScreen.RenewRequests, nextRequest)
+        if (approve) {
+            val contract = list(AppScreen.Contracts).firstOrNull { it.id == request.detail("contractId") }
+                ?: error("Không tìm thấy hợp đồng cần gia hạn.")
+            upsert(
+                AppScreen.Contracts,
+                contract.copy(
+                    value = "${contract.detail("startDate")} - ${request.detail("newEndDate")}",
+                    note = "${contract.note}\nĐã gia hạn đến ${request.detail("newEndDate")}.",
+                    details = contract.details.replaceDetail("endDate", request.detail("newEndDate"))
+                )
+            )
+        }
+        return nextRequest
+    }
+
     private fun seedIfNeeded() {
-        if (prefs.getBoolean("seeded", false)) return
+        if (prefs.getBoolean("seeded", false)) {
+            migrateDemoLinksIfNeeded()
+            return
+        }
         saveUsers(
             JSONArray()
                 .put(seedUser(1, "Admin", "Admin123", UserRole.Admin, "Admin hệ thống", "admin@demo.local"))
@@ -313,6 +514,40 @@ class LocalAppStore(context: Context) {
         )
         saveItems(seedItems())
         prefs.edit().putBoolean("seeded", true).apply()
+    }
+
+    private fun migrateDemoLinksIfNeeded() {
+        val contract = list(AppScreen.Contracts).firstOrNull { it.id == "HD001" } ?: return
+        if (contract.detail("tenantUsername").isNotBlank()) return
+        val room = list(AppScreen.Rooms).firstOrNull { it.id == "P101" }
+        if (room != null) {
+            upsert(
+                AppScreen.Rooms,
+                room.copy(
+                    status = "Đã thuê",
+                    details = room.details
+                        .replaceDetail("tenantUsername", "nguoithue")
+                        .replaceDetail("tenantName", "Người Thuê Demo")
+                        .replaceDetail("contractId", "HD001")
+                )
+            )
+        }
+        upsert(
+            AppScreen.Contracts,
+            contract.copy(
+                title = "Hợp đồng P101 - Người Thuê Demo",
+                status = "Đang hiệu lực",
+                value = "01/05/2026 - 01/05/2027",
+                details = contract.details
+                    .replaceDetail("tenantUsername", "nguoithue")
+                    .replaceDetail("tenantName", "Người Thuê Demo")
+                    .replaceDetail("roomId", "P101")
+                    .replaceDetail("roomName", "Phòng A01")
+                    .replaceDetail("startDate", "01/05/2026")
+                    .replaceDetail("endDate", "01/05/2027")
+                    .replaceDetail("deposit", "3.200.000đ")
+            )
+        )
     }
 
     private fun seedUser(id: Int, username: String, password: String, role: UserRole, fullName: String, email: String): JSONObject {
@@ -332,10 +567,10 @@ class LocalAppStore(context: Context) {
         obj.put(AppScreen.Houses.name, JSONArray().put(item("NT01", "Nhà trọ An Bình", "Đang hoạt động", "20 phòng", "Quận 9, TP.HCM")))
         obj.put(AppScreen.RoomTypes.name, JSONArray().put(item("LP01", "Phòng thường", "Đang dùng", "2.300.000đ - 3.000.000đ", "Phòng cơ bản, chi phí hợp lý")))
         obj.put(AppScreen.Rooms.name, JSONArray()
-            .put(item("P101", "Phòng A01", "Đã thuê", "3.200.000đ/tháng", "Tầng 1 - Nhà trọ An Bình"))
+            .put(itemWithDetails("P101", "Phòng A01", "Đã thuê", "3.200.000đ/tháng", "Tầng 1 - Nhà trọ An Bình", listOf("tenantUsername" to "nguoithue", "tenantName" to "Người Thuê Demo", "contractId" to "HD001")))
             .put(item("P102", "Phòng A02", "Còn trống", "2.750.000đ/tháng", "Sẵn sàng cho thuê")))
-        obj.put(AppScreen.Tenants.name, JSONArray().put(item("KT001", "Người Thuê Demo", "Đang thuê", "0910000001", "Phòng P101")))
-        obj.put(AppScreen.Contracts.name, JSONArray().put(item("HD001", "Hợp đồng P101", "Đang hiệu lực", "01/05/2026 - 01/05/2027", "Tiền cọc 3.200.000đ")))
+        obj.put(AppScreen.Tenants.name, JSONArray().put(itemWithDetails("KT001", "Người Thuê Demo", "Đang thuê", "nguoithue", "Phòng P101", listOf("tenantUsername" to "nguoithue", "roomId" to "P101", "contractId" to "HD001"))))
+        obj.put(AppScreen.Contracts.name, JSONArray().put(itemWithDetails("HD001", "Hợp đồng P101 - Người Thuê Demo", "Đang hiệu lực", "01/05/2026 - 01/05/2027", "Tiền cọc 3.200.000đ", listOf("tenantUsername" to "nguoithue", "tenantName" to "Người Thuê Demo", "roomId" to "P101", "roomName" to "Phòng A01", "startDate" to "01/05/2026", "endDate" to "01/05/2027", "deposit" to "3.200.000đ"))))
         obj.put(AppScreen.Invoices.name, JSONArray().put(item("H001", "Hóa đơn P101 kỳ 2026-05", "Chưa thanh toán", "3.815.000đ", "Tiền phòng + điện + nước")))
         obj.put(AppScreen.Payments.name, JSONArray().put(item("TT001", "Biên lai P101", "Chờ xác nhận", "3.815.000đ", "Chờ chủ trọ xác nhận")))
         obj.put(AppScreen.Services.name, JSONArray().put(item("DV01", "Internet", "Tính phí", "100.000đ/tháng", "Tính theo phòng")))
@@ -358,6 +593,9 @@ class LocalAppStore(context: Context) {
     }
 
     private fun item(id: String, title: String, status: String, value: String, note: String): JSONObject = RentalItem(id, title, status, value, note).toJson()
+    private fun itemWithDetails(id: String, title: String, status: String, value: String, note: String, details: List<Pair<String, String>>): JSONObject {
+        return RentalItem(id, title, status, value, note, details).toJson()
+    }
     private fun usersArray(): JSONArray = JSONArray(prefs.getString("users", "[]") ?: "[]")
     private fun itemsObject(): JSONObject = JSONObject(prefs.getString("items", "{}") ?: "{}")
     private fun saveUsers(users: JSONArray) = prefs.edit().putString("users", users.toString()).apply()
@@ -382,6 +620,12 @@ class LocalAppStore(context: Context) {
 }
 
 private fun RentalItem.detail(key: String): String = details.firstOrNull { it.first == key }?.second.orEmpty()
+private fun List<Pair<String, String>>.replaceDetail(key: String, value: String): List<Pair<String, String>> {
+    val withoutKey = filterNot { it.first == key }
+    return if (value.isBlank()) withoutKey else withoutKey + (key to value)
+}
+
+private fun List<Pair<String, String>>.removeDetail(key: String): List<Pair<String, String>> = filterNot { it.first == key }
 
 private fun JSONObject.toSession(): UserSession = UserSession(
     token = "local:${optString("username")}:${System.currentTimeMillis()}",

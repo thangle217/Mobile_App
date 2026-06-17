@@ -447,7 +447,9 @@ private fun ModuleScreen(repository: RentalRepository, session: UserSession?, sc
     var status by remember(screen) { mutableStateOf("Tất cả") }
     var selected by remember { mutableStateOf<RentalItem?>(null) }
     var editing by remember { mutableStateOf<RentalItem?>(null) }
+    var contractEditing by remember { mutableStateOf<RentalItem?>(null) }
     var rentRequestRoom by remember { mutableStateOf<RentalItem?>(null) }
+    var renewContract by remember { mutableStateOf<RentalItem?>(null) }
     var actionError by remember { mutableStateOf<String?>(null) }
     val role = session?.role ?: UserRole.NguoiDung
     val canManage = canManageScreen(role, screen)
@@ -479,13 +481,17 @@ private fun ModuleScreen(repository: RentalRepository, session: UserSession?, sc
                 Button(
                     onClick = {
                         actionError = null
-                        editing = RentalItem(
-                            id = "",
-                            title = "",
-                            status = defaultStatus(screen),
-                            value = "",
-                            note = ""
-                        )
+                        if (screen == AppScreen.Contracts) {
+                            contractEditing = RentalItem("", "", "Chờ người thuê xác nhận", "", "")
+                        } else {
+                            editing = RentalItem(
+                                id = "",
+                                title = "",
+                                status = defaultStatus(screen),
+                                value = "",
+                                note = ""
+                            )
+                        }
                     },
                     modifier = Modifier.fillMaxWidth().height(48.dp),
                     shape = RoundedCornerShape(8.dp),
@@ -510,10 +516,10 @@ private fun ModuleScreen(repository: RentalRepository, session: UserSession?, sc
                             item = item,
                             canManage = canManage,
                             onOpen = { selected = item },
-                            onEdit = {
-                                actionError = null
-                                editing = item
-                            },
+                        onEdit = {
+                            actionError = null
+                            if (screen == AppScreen.Contracts) contractEditing = item else editing = item
+                        },
                             onDelete = {
                                 actionError = null
                                 scope.launch {
@@ -555,6 +561,35 @@ private fun ModuleScreen(repository: RentalRepository, session: UserSession?, sc
                                         .onSuccess { load() }
                                         .onFailure { actionError = it.message ?: "Không thể từ chối hợp đồng." }
                                 }
+                            },
+                            onCloseContract = {
+                                scope.launch {
+                                    repository.closeContract(item.id, cancel = false, session = session)
+                                        .onSuccess { load() }
+                                        .onFailure { actionError = it.message ?: "Không thể kết thúc hợp đồng." }
+                                }
+                            },
+                            onCancelContract = {
+                                scope.launch {
+                                    repository.closeContract(item.id, cancel = true, session = session)
+                                        .onSuccess { load() }
+                                        .onFailure { actionError = it.message ?: "Không thể hủy hợp đồng." }
+                                }
+                            },
+                            onRenewContract = { renewContract = item },
+                            onApproveRenew = {
+                                scope.launch {
+                                    repository.decideRenewRequest(item.id, approve = true, session = session)
+                                        .onSuccess { load() }
+                                        .onFailure { actionError = it.message ?: "Không thể duyệt gia hạn." }
+                                }
+                            },
+                            onRejectRenew = {
+                                scope.launch {
+                                    repository.decideRenewRequest(item.id, approve = false, session = session)
+                                        .onSuccess { load() }
+                                        .onFailure { actionError = it.message ?: "Không thể từ chối gia hạn." }
+                                }
                             }
                         )
                     }
@@ -586,6 +621,34 @@ private fun ModuleScreen(repository: RentalRepository, session: UserSession?, sc
         )
     }
 
+    contractEditing?.let { item ->
+        ContractEditorDialog(
+            item = item,
+            onDismiss = { contractEditing = null },
+            onSave = { roomId, tenantUsername, startDate, endDate, deposit, note, status ->
+                actionError = null
+                scope.launch {
+                    repository.saveContract(
+                        contractId = item.id,
+                        roomId = roomId,
+                        tenantUsername = tenantUsername,
+                        startDate = startDate,
+                        endDate = endDate,
+                        deposit = deposit,
+                        note = note,
+                        status = status,
+                        session = session
+                    ).onSuccess {
+                        contractEditing = null
+                        load()
+                    }.onFailure {
+                        actionError = it.message ?: "Không thể lưu hợp đồng."
+                    }
+                }
+            }
+        )
+    }
+
     rentRequestRoom?.let { room ->
         RentRequestDialog(
             room = room,
@@ -599,6 +662,24 @@ private fun ModuleScreen(repository: RentalRepository, session: UserSession?, sc
                             load()
                         }
                         .onFailure { actionError = it.message ?: "Không thể gửi yêu cầu thuê phòng." }
+                }
+            }
+        )
+    }
+
+    renewContract?.let { contract ->
+        RenewRequestDialog(
+            contract = contract,
+            onDismiss = { renewContract = null },
+            onSubmit = { newEndDate, note ->
+                actionError = null
+                scope.launch {
+                    repository.createRenewRequest(contract.id, session, newEndDate, note)
+                        .onSuccess {
+                            renewContract = null
+                            load()
+                        }
+                        .onFailure { actionError = it.message ?: "Không thể gửi yêu cầu gia hạn." }
                 }
             }
         )
@@ -1158,12 +1239,20 @@ private fun ModuleActionBar(
     onApproveRequest: () -> Unit,
     onRejectRequest: () -> Unit,
     onConfirmContract: () -> Unit,
-    onRejectContract: () -> Unit
+    onRejectContract: () -> Unit,
+    onCloseContract: () -> Unit,
+    onCancelContract: () -> Unit,
+    onRenewContract: () -> Unit,
+    onApproveRenew: () -> Unit,
+    onRejectRenew: () -> Unit
 ) {
     val showRent = role == UserRole.NguoiDung && screen == AppScreen.Rooms && item.status.equals("Còn trống", true)
     val showDecision = role != UserRole.NguoiDung && screen == AppScreen.RentRequests && item.status.contains("Chờ", true)
     val showConfirm = role == UserRole.NguoiDung && screen == AppScreen.Contracts && item.status == "Chờ người thuê xác nhận"
-    if (!showRent && !showDecision && !showConfirm) return
+    val showRenew = role == UserRole.NguoiDung && screen == AppScreen.Contracts && item.status == "Đang hiệu lực"
+    val showClose = role != UserRole.NguoiDung && screen == AppScreen.Contracts && item.status in setOf("Chờ người thuê xác nhận", "Đang hiệu lực")
+    val showRenewDecision = role != UserRole.NguoiDung && screen == AppScreen.RenewRequests && item.status.contains("Chờ", true)
+    if (!showRent && !showDecision && !showConfirm && !showRenew && !showClose && !showRenewDecision) return
 
     Surface(
         shape = RoundedCornerShape(8.dp),
@@ -1219,8 +1308,213 @@ private fun ModuleActionBar(
                     Text("Từ chối", color = Color(0xFFDC2626), fontWeight = FontWeight.Bold)
                 }
             }
+            if (showRenew) {
+                Button(
+                    onClick = onRenewContract,
+                    shape = RoundedCornerShape(8.dp),
+                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFA855F7)),
+                    modifier = Modifier.fillMaxWidth().height(46.dp)
+                ) {
+                    Text("Gửi yêu cầu gia hạn", color = Color.White, fontWeight = FontWeight.Bold)
+                }
+            }
+            if (showClose) {
+                Button(
+                    onClick = onCloseContract,
+                    shape = RoundedCornerShape(8.dp),
+                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF0F766E)),
+                    modifier = Modifier.weight(1f).height(46.dp)
+                ) {
+                    Text("Kết thúc", color = Color.White, fontWeight = FontWeight.Bold)
+                }
+                OutlinedButton(
+                    onClick = onCancelContract,
+                    shape = RoundedCornerShape(8.dp),
+                    modifier = Modifier.weight(1f).height(46.dp)
+                ) {
+                    Text("Hủy", color = Color(0xFFDC2626), fontWeight = FontWeight.Bold)
+                }
+            }
+            if (showRenewDecision) {
+                Button(
+                    onClick = onApproveRenew,
+                    shape = RoundedCornerShape(8.dp),
+                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF059669)),
+                    modifier = Modifier.weight(1f).height(46.dp)
+                ) {
+                    Text("Duyệt gia hạn", color = Color.White, fontWeight = FontWeight.Bold)
+                }
+                OutlinedButton(
+                    onClick = onRejectRenew,
+                    shape = RoundedCornerShape(8.dp),
+                    modifier = Modifier.weight(1f).height(46.dp)
+                ) {
+                    Text("Từ chối", color = Color(0xFFDC2626), fontWeight = FontWeight.Bold)
+                }
+            }
         }
     }
+}
+
+@Composable
+private fun ContractEditorDialog(
+    item: RentalItem,
+    onDismiss: () -> Unit,
+    onSave: (String, String, String, String, String, String, String) -> Unit
+) {
+    var roomId by remember(item) { mutableStateOf(item.detail("roomId")) }
+    var tenantUsername by remember(item) { mutableStateOf(item.detail("tenantUsername")) }
+    var startDate by remember(item) { mutableStateOf(item.detail("startDate")) }
+    var endDate by remember(item) { mutableStateOf(item.detail("endDate")) }
+    var deposit by remember(item) { mutableStateOf(item.detail("deposit")) }
+    var note by remember(item) { mutableStateOf(item.note) }
+    var status by remember(item) { mutableStateOf(item.status.ifBlank { "Chờ người thuê xác nhận" }) }
+    var localError by remember { mutableStateOf<String?>(null) }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(if (item.id.isBlank()) "Tạo hợp đồng" else "Sửa hợp đồng") },
+        text = {
+            LazyColumn(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                item {
+                    OutlinedTextField(
+                        value = roomId,
+                        onValueChange = { roomId = it },
+                        label = { Text("Mã phòng") },
+                        modifier = Modifier.fillMaxWidth(),
+                        singleLine = true,
+                        shape = RoundedCornerShape(8.dp)
+                    )
+                }
+                item {
+                    OutlinedTextField(
+                        value = tenantUsername,
+                        onValueChange = { tenantUsername = it },
+                        label = { Text("Tên đăng nhập người thuê") },
+                        modifier = Modifier.fillMaxWidth(),
+                        singleLine = true,
+                        shape = RoundedCornerShape(8.dp)
+                    )
+                }
+                item {
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
+                        OutlinedTextField(
+                            value = startDate,
+                            onValueChange = { startDate = it },
+                            label = { Text("Ngày bắt đầu") },
+                            modifier = Modifier.weight(1f),
+                            singleLine = true,
+                            shape = RoundedCornerShape(8.dp)
+                        )
+                        OutlinedTextField(
+                            value = endDate,
+                            onValueChange = { endDate = it },
+                            label = { Text("Ngày kết thúc") },
+                            modifier = Modifier.weight(1f),
+                            singleLine = true,
+                            shape = RoundedCornerShape(8.dp)
+                        )
+                    }
+                }
+                item {
+                    OutlinedTextField(
+                        value = deposit,
+                        onValueChange = { deposit = it },
+                        label = { Text("Tiền cọc") },
+                        modifier = Modifier.fillMaxWidth(),
+                        singleLine = true,
+                        shape = RoundedCornerShape(8.dp)
+                    )
+                }
+                item {
+                    OutlinedTextField(
+                        value = status,
+                        onValueChange = { status = it },
+                        label = { Text("Trạng thái") },
+                        modifier = Modifier.fillMaxWidth(),
+                        singleLine = true,
+                        shape = RoundedCornerShape(8.dp)
+                    )
+                }
+                item {
+                    OutlinedTextField(
+                        value = note,
+                        onValueChange = { note = it },
+                        label = { Text("Ghi chú / điều khoản") },
+                        modifier = Modifier.fillMaxWidth(),
+                        minLines = 2,
+                        shape = RoundedCornerShape(8.dp)
+                    )
+                }
+                localError?.let {
+                    item { Text(it, color = Color(0xFFDC2626), style = MaterialTheme.typography.bodySmall) }
+                }
+            }
+        },
+        confirmButton = {
+            Button(
+                onClick = {
+                    if (roomId.isBlank() || tenantUsername.isBlank() || startDate.isBlank() || endDate.isBlank()) {
+                        localError = "Vui lòng nhập đủ mã phòng, người thuê, ngày bắt đầu và ngày kết thúc."
+                    } else {
+                        onSave(roomId.trim(), tenantUsername.trim(), startDate.trim(), endDate.trim(), deposit.trim(), note.trim(), status.trim())
+                    }
+                },
+                shape = RoundedCornerShape(8.dp),
+                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF6366F1))
+            ) {
+                Text("Lưu hợp đồng")
+            }
+        },
+        dismissButton = { TextButton(onClick = onDismiss) { Text("Hủy") } }
+    )
+}
+
+@Composable
+private fun RenewRequestDialog(contract: RentalItem, onDismiss: () -> Unit, onSubmit: (String, String) -> Unit) {
+    var newEndDate by remember(contract) { mutableStateOf(contract.detail("endDate")) }
+    var note by remember(contract) { mutableStateOf("Mình muốn gia hạn hợp đồng này.") }
+    var localError by remember { mutableStateOf<String?>(null) }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Gửi yêu cầu gia hạn") },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                DetailRow("Hợp đồng", contract.title)
+                DetailRow("Ngày kết thúc hiện tại", contract.detail("endDate").ifBlank { contract.value })
+                OutlinedTextField(
+                    value = newEndDate,
+                    onValueChange = { newEndDate = it },
+                    label = { Text("Ngày kết thúc mới") },
+                    modifier = Modifier.fillMaxWidth(),
+                    singleLine = true,
+                    shape = RoundedCornerShape(8.dp)
+                )
+                OutlinedTextField(
+                    value = note,
+                    onValueChange = { note = it },
+                    label = { Text("Ghi chú") },
+                    modifier = Modifier.fillMaxWidth(),
+                    minLines = 2,
+                    shape = RoundedCornerShape(8.dp)
+                )
+                localError?.let { Text(it, color = Color(0xFFDC2626), style = MaterialTheme.typography.bodySmall) }
+            }
+        },
+        confirmButton = {
+            Button(
+                onClick = {
+                    if (newEndDate.isBlank()) localError = "Vui lòng nhập ngày kết thúc mới." else onSubmit(newEndDate.trim(), note.trim())
+                },
+                shape = RoundedCornerShape(8.dp),
+                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFA855F7))
+            ) {
+                Text("Gửi gia hạn")
+            }
+        },
+        dismissButton = { TextButton(onClick = onDismiss) { Text("Hủy") } }
+    )
 }
 
 @Composable
@@ -1466,3 +1760,5 @@ private fun screenAccent(screen: AppScreen): Color = when (screen) {
     AppScreen.Users -> Color(0xFF475569)
     AppScreen.Account -> Color(0xFF0F766E)
 }
+
+private fun RentalItem.detail(key: String): String = details.firstOrNull { it.first == key }?.second.orEmpty()
