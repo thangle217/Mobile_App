@@ -89,6 +89,36 @@ class RentalRepository(context: Context) {
         store.confirmContract(contractId, approve, session)
     }
 
+    suspend fun saveContract(
+        contractId: String,
+        roomId: String,
+        tenantUsername: String,
+        startDate: String,
+        endDate: String,
+        deposit: String,
+        note: String,
+        status: String,
+        session: UserSession?
+    ): Result<RentalItem> = runCatching {
+        require(session?.role == UserRole.Admin || session?.role == UserRole.ChuTro) { "Chỉ Admin hoặc Chủ trọ được lưu hợp đồng." }
+        store.saveContract(contractId, roomId, tenantUsername, startDate, endDate, deposit, note, status, session)
+    }
+
+    suspend fun closeContract(contractId: String, cancel: Boolean, session: UserSession?): Result<RentalItem> = runCatching {
+        require(session?.role == UserRole.Admin || session?.role == UserRole.ChuTro) { "Chỉ Admin hoặc Chủ trọ được kết thúc/hủy hợp đồng." }
+        store.closeContract(contractId, cancel, session)
+    }
+
+    suspend fun createRenewRequest(contractId: String, session: UserSession?, newEndDate: String, note: String): Result<RentalItem> = runCatching {
+        require(session?.role == UserRole.NguoiDung) { "Chỉ Người thuê được gửi yêu cầu gia hạn." }
+        store.createRenewRequest(contractId, session, newEndDate, note)
+    }
+
+    suspend fun decideRenewRequest(requestId: String, approve: Boolean, session: UserSession?): Result<RentalItem> = runCatching {
+        require(session?.role == UserRole.Admin || session?.role == UserRole.ChuTro) { "Chỉ Admin hoặc Chủ trọ được duyệt gia hạn." }
+        store.decideRenewRequest(requestId, approve, session)
+    }
+
     fun demoSession(roleName: String): UserSession {
         val role = UserRole.from(roleName)
         val username = when (role) {
