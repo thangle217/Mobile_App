@@ -56,17 +56,49 @@ class RentalRepository(context: Context) {
 
     suspend fun list(screen: AppScreen, session: UserSession?): UiState<List<RentalItem>> {
         val items = store.list(screen, session)
-        return if (items.isEmpty()) {
-            UiState.Empty("Chưa có dữ liệu ${screen.label.lowercase()}.")
-        } else {
-            UiState.Content(items, DataSource.Local)
-        }
+        // Luôn trả về Content (kể cả khi rỗng) để ModuleScreen vẫn render và hiện nút "Thêm"
+        return UiState.Content(items, DataSource.Local)
     }
 
     suspend fun saveItem(screen: AppScreen, item: RentalItem, session: UserSession?): Result<RentalItem> = runCatching {
         require(canManage(session?.role, screen)) { "Tài khoản này không có quyền sửa ${screen.label.lowercase()}." }
+        validateItemForScreen(screen, item)
         val id = item.id.ifBlank { store.nextId(screen) }
-        store.upsert(screen, item.copy(id = id))
+        val finalItem = if (session?.role == UserRole.NguoiDung && item.details.none { it.first == "tenantUsername" }) {
+            item.copy(details = item.details + ("tenantUsername" to session.username))
+        } else {
+            item
+        }
+        store.upsert(screen, finalItem.copy(id = id))
+    }
+
+    private fun validateItemForScreen(screen: AppScreen, item: RentalItem) {
+        when (screen) {
+            AppScreen.Houses -> {
+                require(item.title.isNotBlank()) { "Tên nhà trọ không được để trống." }
+            }
+            AppScreen.RoomTypes -> {
+                require(item.title.isNotBlank()) { "Tên loại phòng không được để trống." }
+            }
+            AppScreen.Rooms -> {
+                require(item.title.isNotBlank()) { "Tên phòng không được để trống." }
+                require(item.value.isNotBlank()) { "Vui lòng nhập giá thuê." }
+            }
+            AppScreen.Services -> {
+                require(item.title.isNotBlank()) { "Tên dịch vụ không được để trống." }
+                require(item.value.isNotBlank()) { "Vui lòng nhập đơn giá." }
+            }
+            AppScreen.Incidents -> {
+                require(item.title.isNotBlank()) { "Vui lòng nhập tiêu đề sự cố." }
+            }
+            AppScreen.Payments -> {
+                require(item.title.isNotBlank()) { "Vui lòng nhập tiêu đề biên lai." }
+                require(item.value.isNotBlank()) { "Vui lòng nhập số tiền." }
+            }
+            else -> {
+                require(item.title.isNotBlank()) { "Tên/nội dung không được để trống." }
+            }
+        }
     }
 
     suspend fun deleteItem(screen: AppScreen, id: String, session: UserSession?): Result<Unit> = runCatching {
@@ -76,17 +108,17 @@ class RentalRepository(context: Context) {
 
     suspend fun requestRoom(roomId: String, session: UserSession?, duration: String, note: String): Result<RentalItem> = runCatching {
         require(session?.role == UserRole.NguoiDung) { "Chỉ Người thuê được gửi yêu cầu thuê phòng." }
-        store.createRentRequest(roomId, session, duration, note)
+        store.createRentRequest(roomId, session!!, duration, note)
     }
 
     suspend fun decideRentRequest(requestId: String, approve: Boolean, session: UserSession?): Result<RentalItem> = runCatching {
         require(session?.role == UserRole.Admin || session?.role == UserRole.ChuTro) { "Chỉ Admin hoặc Chủ trọ được duyệt yêu cầu thuê." }
-        store.decideRentRequest(requestId, approve, session)
+        store.decideRentRequest(requestId, approve, session!!)
     }
 
     suspend fun confirmContract(contractId: String, approve: Boolean, session: UserSession?): Result<RentalItem> = runCatching {
         require(session?.role == UserRole.NguoiDung) { "Chỉ Người thuê được xác nhận hợp đồng của mình." }
-        store.confirmContract(contractId, approve, session)
+        store.confirmContract(contractId, approve, session!!)
     }
 
     suspend fun saveContract(
@@ -101,23 +133,73 @@ class RentalRepository(context: Context) {
         session: UserSession?
     ): Result<RentalItem> = runCatching {
         require(session?.role == UserRole.Admin || session?.role == UserRole.ChuTro) { "Chỉ Admin hoặc Chủ trọ được lưu hợp đồng." }
-        store.saveContract(contractId, roomId, tenantUsername, startDate, endDate, deposit, note, status, session)
+        store.saveContract(contractId, roomId, tenantUsername, startDate, endDate, deposit, note, status, session!!)
     }
 
     suspend fun closeContract(contractId: String, cancel: Boolean, session: UserSession?): Result<RentalItem> = runCatching {
         require(session?.role == UserRole.Admin || session?.role == UserRole.ChuTro) { "Chỉ Admin hoặc Chủ trọ được kết thúc/hủy hợp đồng." }
-        store.closeContract(contractId, cancel, session)
+        store.closeContract(contractId, cancel, session!!)
     }
 
     suspend fun createRenewRequest(contractId: String, session: UserSession?, newEndDate: String, note: String): Result<RentalItem> = runCatching {
         require(session?.role == UserRole.NguoiDung) { "Chỉ Người thuê được gửi yêu cầu gia hạn." }
-        store.createRenewRequest(contractId, session, newEndDate, note)
+        store.createRenewRequest(contractId, session!!, newEndDate, note)
     }
 
     suspend fun decideRenewRequest(requestId: String, approve: Boolean, session: UserSession?): Result<RentalItem> = runCatching {
         require(session?.role == UserRole.Admin || session?.role == UserRole.ChuTro) { "Chỉ Admin hoặc Chủ trọ được duyệt gia hạn." }
-        store.decideRenewRequest(requestId, approve, session)
+        store.decideRenewRequest(requestId, approve, session!!)
     }
+
+    suspend fun getLatestUtilityIndex(screen: AppScreen, roomId: String): Result<Double> = runCatching {
+        store.getLatestUtilityIndex(screen, roomId)
+    }
+
+    suspend fun saveUtilityReading(
+        screen: AppScreen,
+        roomId: String,
+        period: String,
+        oldIndex: Double,
+        newIndex: Double,
+        price: Double,
+        session: UserSession?
+    ): Result<RentalItem> = runCatching {
+        require(session?.role == UserRole.Admin || session?.role == UserRole.ChuTro) { "Chỉ Admin hoặc Chủ trọ có quyền ghi chỉ số điện nước." }
+        store.saveUtilityReading(screen, roomId, period, oldIndex, newIndex, price)
+    }
+
+    suspend fun createInvoice(
+        roomId: String,
+        period: String,
+        otherCost: Double,
+        otherNote: String,
+        session: UserSession?
+    ): Result<RentalItem> = runCatching {
+        require(session?.role == UserRole.Admin || session?.role == UserRole.ChuTro) { "Chỉ Admin hoặc Chủ trọ có quyền lập hóa đơn." }
+        store.createInvoice(roomId, period, otherCost, otherNote)
+    }
+
+    suspend fun submitPayment(
+        invoiceId: String,
+        transactionId: String,
+        receiptImage: String,
+        note: String,
+        session: UserSession?
+    ): Result<RentalItem> = runCatching {
+        require(session?.role == UserRole.NguoiDung) { "Chỉ người thuê có quyền gửi biên lai thanh toán." }
+        store.submitPayment(invoiceId, transactionId, receiptImage, note, session!!)
+    }
+
+    suspend fun decidePayment(
+        paymentId: String,
+        approve: Boolean,
+        rejectReason: String?,
+        session: UserSession?
+    ): Result<RentalItem> = runCatching {
+        require(session?.role == UserRole.Admin || session?.role == UserRole.ChuTro) { "Chỉ Admin hoặc Chủ trọ có quyền duyệt thanh toán." }
+        store.decidePayment(paymentId, approve, rejectReason, session!!)
+    }
+
 
     fun demoSession(roleName: String): UserSession {
         val role = UserRole.from(roleName)

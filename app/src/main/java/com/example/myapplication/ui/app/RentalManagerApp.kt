@@ -71,6 +71,7 @@ import com.example.myapplication.domain.model.UiState
 import com.example.myapplication.domain.model.UserRole
 import com.example.myapplication.domain.model.UserSession
 import com.example.myapplication.domain.util.formatCompactMoney
+import com.example.myapplication.domain.util.moneyValue
 import kotlinx.coroutines.launch
 import org.json.JSONObject
 
@@ -451,6 +452,12 @@ private fun ModuleScreen(repository: RentalRepository, session: UserSession?, sc
     var rentRequestRoom by remember { mutableStateOf<RentalItem?>(null) }
     var renewContract by remember { mutableStateOf<RentalItem?>(null) }
     var actionError by remember { mutableStateOf<String?>(null) }
+    var confirmData by remember { mutableStateOf<ConfirmData?>(null) }
+    var houses by remember(screen) { mutableStateOf<List<RentalItem>>(emptyList()) }
+    var rooms by remember(screen) { mutableStateOf<List<RentalItem>>(emptyList()) }
+    var invoices by remember(screen) { mutableStateOf<List<RentalItem>>(emptyList()) }
+    var paymentForInvoice by remember { mutableStateOf<RentalItem?>(null) }
+    var rejectingPayment by remember { mutableStateOf<RentalItem?>(null) }
     val role = session?.role ?: UserRole.NguoiDung
     val canManage = canManageScreen(role, screen)
 
@@ -461,6 +468,23 @@ private fun ModuleScreen(repository: RentalRepository, session: UserSession?, sc
     LaunchedEffect(screen, session, state) {
         if (state is UiState.Loading) state = repository.list(screen, session)
     }
+
+    // Tải danh sách bổ trợ khi cần (dùng cho form chuyên biệt)
+    LaunchedEffect(screen) {
+        if (screen == AppScreen.Rooms) {
+            val result = repository.list(AppScreen.Houses, null)
+            if (result is UiState.Content) houses = result.data
+        }
+        if (screen in setOf(AppScreen.Electric, AppScreen.Water, AppScreen.Invoices, AppScreen.Payments)) {
+            val result = repository.list(AppScreen.Rooms, null)
+            if (result is UiState.Content) rooms = result.data
+        }
+        if (screen == AppScreen.Payments) {
+            val result = repository.list(AppScreen.Invoices, session)
+            if (result is UiState.Content) invoices = result.data
+        }
+    }
+
 
     StateContainer(state = state, onRetry = { load() }, onSessionExpired = onSessionExpired) { items, source ->
         val statuses = listOf("Tất cả") + items.map { it.status }.distinct()
@@ -504,11 +528,20 @@ private fun ModuleScreen(repository: RentalRepository, session: UserSession?, sc
             actionError?.let {
                 item { Text(it, color = Color(0xFFDC2626), style = MaterialTheme.typography.bodySmall) }
             }
-            item {
-                SearchPanel(query, { query = it }, statuses, status, { status = it })
+            if (items.isNotEmpty()) {
+                item {
+                    SearchPanel(query, { query = it }, statuses, status, { status = it })
+                }
             }
-            if (filtered.isEmpty()) {
-                item { EmptyState("Không tìm thấy dữ liệu phù hợp.") }
+            if (items.isEmpty()) {
+                item {
+                    EmptyState(
+                        if (canManage) "Chưa có dữ liệu. Bấm \"Thêm\" để tạo mới."
+                        else "Chưa có dữ liệu ${screen.label.lowercase()}."
+                    )
+                }
+            } else if (filtered.isEmpty()) {
+                item { EmptyState("Không tìm thấy kết quả phù hợp với bộ lọc.") }
             } else {
                 items(filtered, key = { it.id }) { item ->
                     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -516,17 +549,23 @@ private fun ModuleScreen(repository: RentalRepository, session: UserSession?, sc
                             item = item,
                             canManage = canManage,
                             onOpen = { selected = item },
-                        onEdit = {
-                            actionError = null
-                            if (screen == AppScreen.Contracts) contractEditing = item else editing = item
-                        },
+                            onEdit = {
+                                actionError = null
+                                if (screen == AppScreen.Contracts) contractEditing = item else editing = item
+                            },
                             onDelete = {
                                 actionError = null
-                                scope.launch {
-                                    repository.deleteItem(screen, item.id, session)
-                                        .onSuccess { load() }
-                                        .onFailure { actionError = it.message ?: "Không thể xóa dữ liệu." }
-                                }
+                                confirmData = ConfirmData(
+                                    title = "Xác nhận xóa",
+                                    message = "Bạn có chắc chắn muốn xóa bản ghi này (${item.id})? Hành động này không thể hoàn tác.",
+                                    onConfirm = {
+                                        scope.launch {
+                                            repository.deleteItem(screen, item.id, session)
+                                                .onSuccess { load() }
+                                                .onFailure { actionError = it.message ?: "Không thể xóa dữ liệu." }
+                                        }
+                                    }
+                                )
                             }
                         )
                         ModuleActionBar(
@@ -535,62 +574,126 @@ private fun ModuleScreen(repository: RentalRepository, session: UserSession?, sc
                             role = role,
                             onRentRoom = { rentRequestRoom = item },
                             onApproveRequest = {
-                                scope.launch {
-                                    repository.decideRentRequest(item.id, approve = true, session = session)
-                                        .onSuccess { load() }
-                                        .onFailure { actionError = it.message ?: "Không thể duyệt yêu cầu." }
-                                }
+                                confirmData = ConfirmData(
+                                    title = "Duyệt yêu cầu thuê",
+                                    message = "Bạn có chắc chắn muốn duyệt yêu cầu thuê này không?",
+                                    onConfirm = {
+                                        scope.launch {
+                                            repository.decideRentRequest(item.id, approve = true, session = session)
+                                                .onSuccess { load() }
+                                                .onFailure { actionError = it.message ?: "Không thể duyệt yêu cầu." }
+                                        }
+                                    }
+                                )
                             },
                             onRejectRequest = {
-                                scope.launch {
-                                    repository.decideRentRequest(item.id, approve = false, session = session)
-                                        .onSuccess { load() }
-                                        .onFailure { actionError = it.message ?: "Không thể từ chối yêu cầu." }
-                                }
+                                confirmData = ConfirmData(
+                                    title = "Từ chối yêu cầu thuê",
+                                    message = "Bạn có chắc chắn muốn từ chối yêu cầu thuê này không?",
+                                    onConfirm = {
+                                        scope.launch {
+                                            repository.decideRentRequest(item.id, approve = false, session = session)
+                                                .onSuccess { load() }
+                                                .onFailure { actionError = it.message ?: "Không thể từ chối yêu cầu." }
+                                        }
+                                    }
+                                )
                             },
                             onConfirmContract = {
-                                scope.launch {
-                                    repository.confirmContract(item.id, approve = true, session = session)
-                                        .onSuccess { load() }
-                                        .onFailure { actionError = it.message ?: "Không thể xác nhận hợp đồng." }
-                                }
+                                confirmData = ConfirmData(
+                                    title = "Xác nhận hợp đồng",
+                                    message = "Bạn có chắc chắn muốn xác nhận hợp đồng này? Phòng sẽ được chuyển sang trạng thái Đã thuê.",
+                                    onConfirm = {
+                                        scope.launch {
+                                            repository.confirmContract(item.id, approve = true, session = session)
+                                                .onSuccess { load() }
+                                                .onFailure { actionError = it.message ?: "Không thể xác nhận hợp đồng." }
+                                        }
+                                    }
+                                )
                             },
                             onRejectContract = {
-                                scope.launch {
-                                    repository.confirmContract(item.id, approve = false, session = session)
-                                        .onSuccess { load() }
-                                        .onFailure { actionError = it.message ?: "Không thể từ chối hợp đồng." }
-                                }
+                                confirmData = ConfirmData(
+                                    title = "Từ chối hợp đồng",
+                                    message = "Bạn có chắc chắn muốn từ chối hợp đồng này?",
+                                    onConfirm = {
+                                        scope.launch {
+                                            repository.confirmContract(item.id, approve = false, session = session)
+                                                .onSuccess { load() }
+                                                .onFailure { actionError = it.message ?: "Không thể từ chối hợp đồng." }
+                                        }
+                                    }
+                                )
                             },
                             onCloseContract = {
-                                scope.launch {
-                                    repository.closeContract(item.id, cancel = false, session = session)
-                                        .onSuccess { load() }
-                                        .onFailure { actionError = it.message ?: "Không thể kết thúc hợp đồng." }
-                                }
+                                confirmData = ConfirmData(
+                                    title = "Kết thúc hợp đồng",
+                                    message = "Bạn có chắc chắn muốn kết thúc hợp đồng này? Phòng sẽ được mở lại trạng thái Còn trống.",
+                                    onConfirm = {
+                                        scope.launch {
+                                            repository.closeContract(item.id, cancel = false, session = session)
+                                                .onSuccess { load() }
+                                                .onFailure { actionError = it.message ?: "Không thể kết thúc hợp đồng." }
+                                        }
+                                    }
+                                )
                             },
                             onCancelContract = {
-                                scope.launch {
-                                    repository.closeContract(item.id, cancel = true, session = session)
-                                        .onSuccess { load() }
-                                        .onFailure { actionError = it.message ?: "Không thể hủy hợp đồng." }
-                                }
+                                confirmData = ConfirmData(
+                                    title = "Hủy hợp đồng",
+                                    message = "Bạn có chắc chắn muốn hủy hợp đồng này? Phòng sẽ được mở lại trạng thái Còn trống.",
+                                    onConfirm = {
+                                        scope.launch {
+                                            repository.closeContract(item.id, cancel = true, session = session)
+                                                .onSuccess { load() }
+                                                .onFailure { actionError = it.message ?: "Không thể hủy hợp đồng." }
+                                        }
+                                    }
+                                )
                             },
                             onRenewContract = { renewContract = item },
                             onApproveRenew = {
-                                scope.launch {
-                                    repository.decideRenewRequest(item.id, approve = true, session = session)
-                                        .onSuccess { load() }
-                                        .onFailure { actionError = it.message ?: "Không thể duyệt gia hạn." }
-                                }
+                                confirmData = ConfirmData(
+                                    title = "Duyệt gia hạn",
+                                    message = "Bạn có chắc chắn muốn duyệt gia hạn hợp đồng này?",
+                                    onConfirm = {
+                                        scope.launch {
+                                            repository.decideRenewRequest(item.id, approve = true, session = session)
+                                                .onSuccess { load() }
+                                                .onFailure { actionError = it.message ?: "Không thể duyệt gia hạn." }
+                                        }
+                                    }
+                                )
                             },
                             onRejectRenew = {
-                                scope.launch {
-                                    repository.decideRenewRequest(item.id, approve = false, session = session)
-                                        .onSuccess { load() }
-                                        .onFailure { actionError = it.message ?: "Không thể từ chối gia hạn." }
-                                }
-                            }
+                                confirmData = ConfirmData(
+                                    title = "Từ chối gia hạn",
+                                    message = "Bạn có chắc chắn muốn từ chối gia hạn hợp đồng này?",
+                                    onConfirm = {
+                                        scope.launch {
+                                            repository.decideRenewRequest(item.id, approve = false, session = session)
+                                                .onSuccess { load() }
+                                                .onFailure { actionError = it.message ?: "Không thể từ chối gia hạn." }
+                                        }
+                                    }
+                                )
+                            },
+                            onPayInvoice = { paymentForInvoice = item },
+                            onApprovePayment = {
+                                confirmData = ConfirmData(
+                                    title = "Duyệt thanh toán",
+                                    message = "Bạn có chắc chắn muốn xác nhận biên lai này? Hóa đơn liên kết sẽ được đánh dấu Đã thanh toán.",
+                                    onConfirm = {
+                                        scope.launch {
+                                            repository.decidePayment(item.id, approve = true, rejectReason = null, session = session)
+                                                .onSuccess { load() }
+                                                .onFailure { actionError = it.message ?: "Không thể duyệt thanh toán." }
+                                        }
+                                    }
+                                )
+                            },
+                            onRejectPayment = { rejectingPayment = item }
+
                         )
                     }
                 }
@@ -598,26 +701,76 @@ private fun ModuleScreen(repository: RentalRepository, session: UserSession?, sc
         }
     }
 
+    confirmData?.let { data ->
+        AlertDialog(
+            onDismissRequest = { confirmData = null },
+            title = { Text(data.title, fontWeight = FontWeight.Bold, color = Color(0xFF134E4A)) },
+            text = { Text(data.message) },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        data.onConfirm()
+                        confirmData = null
+                    },
+                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF0F766E)),
+                    shape = RoundedCornerShape(8.dp)
+                ) {
+                    Text("Đồng ý")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { confirmData = null }) {
+                    Text("Hủy")
+                }
+            }
+        )
+    }
+
     selected?.let {
         DetailDialog(item = it, screen = screen, onDismiss = { selected = null })
     }
 
     editing?.let { item ->
-        EditItemDialog(
+        SpecializedEditDialog(
             screen = screen,
             item = item,
+            houses = houses,
+            rooms = rooms,
+            invoices = invoices,
             onDismiss = { editing = null },
+            onSaveUtility = { s, rId, p, old, new, pr ->
+                actionError = null
+                scope.launch {
+                    repository.saveUtilityReading(s, rId, p, old, new, pr, session)
+                        .onSuccess { editing = null; load() }
+                        .onFailure { actionError = it.message ?: "Không thể lưu chỉ số." }
+                }
+            },
+            onSaveInvoice = { rId, p, other, note ->
+                actionError = null
+                scope.launch {
+                    repository.createInvoice(rId, p, other, note, session)
+                        .onSuccess { editing = null; load() }
+                        .onFailure { actionError = it.message ?: "Không thể tạo hóa đơn." }
+                }
+            },
+            onSavePayment = { invId, txId, img, note ->
+                actionError = null
+                scope.launch {
+                    repository.submitPayment(invId, txId, img, note, session)
+                        .onSuccess { editing = null; load() }
+                        .onFailure { actionError = it.message ?: "Không thể gửi biên lai." }
+                }
+            },
             onSave = { next ->
                 actionError = null
                 scope.launch {
                     repository.saveItem(screen, next, session)
-                        .onSuccess {
-                            editing = null
-                            load()
-                        }
+                        .onSuccess { editing = null; load() }
                         .onFailure { actionError = it.message ?: "Không thể lưu dữ liệu." }
                 }
-            }
+            },
+            repository = repository
         )
     }
 
@@ -684,6 +837,44 @@ private fun ModuleScreen(repository: RentalRepository, session: UserSession?, sc
             }
         )
     }
+
+    paymentForInvoice?.let { invoice ->
+        SubmitPaymentFormDialog(
+            item = RentalItem(
+                id = "",
+                title = "",
+                status = "Chờ xác nhận",
+                value = invoice.value,
+                note = "",
+                details = listOf("invoiceId" to invoice.id)
+            ),
+            invoices = listOf(invoice),
+            onDismiss = { paymentForInvoice = null },
+            onSavePayment = { invId, txId, img, note ->
+                actionError = null
+                scope.launch {
+                    repository.submitPayment(invId, txId, img, note, session)
+                        .onSuccess { paymentForInvoice = null; load() }
+                        .onFailure { actionError = it.message ?: "Không thể gửi biên lai." }
+                }
+            }
+        )
+    }
+
+    rejectingPayment?.let { payment ->
+        RejectPaymentDialog(
+            onDismiss = { rejectingPayment = null },
+            onSubmit = { reason ->
+                actionError = null
+                scope.launch {
+                    repository.decidePayment(payment.id, approve = false, rejectReason = reason, session = session)
+                        .onSuccess { rejectingPayment = null; load() }
+                        .onFailure { actionError = it.message ?: "Không thể từ chối thanh toán." }
+                }
+            }
+        )
+    }
+
 }
 
 @Composable
@@ -1244,7 +1435,10 @@ private fun ModuleActionBar(
     onCancelContract: () -> Unit,
     onRenewContract: () -> Unit,
     onApproveRenew: () -> Unit,
-    onRejectRenew: () -> Unit
+    onRejectRenew: () -> Unit,
+    onPayInvoice: () -> Unit = {},
+    onApprovePayment: () -> Unit = {},
+    onRejectPayment: () -> Unit = {}
 ) {
     val showRent = role == UserRole.NguoiDung && screen == AppScreen.Rooms && item.status.equals("Còn trống", true)
     val showDecision = role != UserRole.NguoiDung && screen == AppScreen.RentRequests && item.status.contains("Chờ", true)
@@ -1252,7 +1446,9 @@ private fun ModuleActionBar(
     val showRenew = role == UserRole.NguoiDung && screen == AppScreen.Contracts && item.status == "Đang hiệu lực"
     val showClose = role != UserRole.NguoiDung && screen == AppScreen.Contracts && item.status in setOf("Chờ người thuê xác nhận", "Đang hiệu lực")
     val showRenewDecision = role != UserRole.NguoiDung && screen == AppScreen.RenewRequests && item.status.contains("Chờ", true)
-    if (!showRent && !showDecision && !showConfirm && !showRenew && !showClose && !showRenewDecision) return
+    val showPayInvoice = role == UserRole.NguoiDung && screen == AppScreen.Invoices && item.status == "Chưa thanh toán"
+    val showPaymentDecision = role != UserRole.NguoiDung && screen == AppScreen.Payments && item.status == "Chờ xác nhận"
+    if (!showRent && !showDecision && !showConfirm && !showRenew && !showClose && !showRenewDecision && !showPayInvoice && !showPaymentDecision) return
 
     Surface(
         shape = RoundedCornerShape(8.dp),
@@ -1352,9 +1548,37 @@ private fun ModuleActionBar(
                     Text("Từ chối", color = Color(0xFFDC2626), fontWeight = FontWeight.Bold)
                 }
             }
+            if (showPayInvoice) {
+                Button(
+                    onClick = onPayInvoice,
+                    shape = RoundedCornerShape(8.dp),
+                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFEA580C)),
+                    modifier = Modifier.fillMaxWidth().height(46.dp)
+                ) {
+                    Text("Thanh toán ngay", color = Color.White, fontWeight = FontWeight.Bold)
+                }
+            }
+            if (showPaymentDecision) {
+                Button(
+                    onClick = onApprovePayment,
+                    shape = RoundedCornerShape(8.dp),
+                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF059669)),
+                    modifier = Modifier.weight(1f).height(46.dp)
+                ) {
+                    Text("Xác nhận", color = Color.White, fontWeight = FontWeight.Bold)
+                }
+                OutlinedButton(
+                    onClick = onRejectPayment,
+                    shape = RoundedCornerShape(8.dp),
+                    modifier = Modifier.weight(1f).height(46.dp)
+                ) {
+                    Text("Từ chối", color = Color(0xFFDC2626), fontWeight = FontWeight.Bold)
+                }
+            }
         }
     }
 }
+
 
 @Composable
 private fun ContractEditorDialog(
@@ -1560,6 +1784,765 @@ private fun RentRequestDialog(room: RentalItem, onDismiss: () -> Unit, onSubmit:
     )
 }
 
+// ─── Router: điều hướng sang form dialog đúng theo màn hình ─────────────────
+@Composable
+private fun SpecializedEditDialog(
+    screen: AppScreen,
+    item: RentalItem,
+    houses: List<RentalItem>,
+    rooms: List<RentalItem>,
+    invoices: List<RentalItem>,
+    onDismiss: () -> Unit,
+    onSaveUtility: (AppScreen, String, String, Double, Double, Double) -> Unit,
+    onSaveInvoice: (String, String, Double, String) -> Unit,
+    onSavePayment: (String, String, String, String) -> Unit,
+    onSave: (RentalItem) -> Unit,
+    repository: RentalRepository
+) {
+    when (screen) {
+        AppScreen.Houses -> HouseFormDialog(item, onDismiss, onSave)
+        AppScreen.RoomTypes -> RoomTypeFormDialog(item, onDismiss, onSave)
+        AppScreen.Rooms -> RoomFormDialog(item, houses, onDismiss, onSave)
+        AppScreen.Services -> ServiceFormDialog(item, onDismiss, onSave)
+        AppScreen.Electric, AppScreen.Water -> UtilityReadingFormDialog(screen, item, rooms, onDismiss, onSaveUtility, repository)
+        AppScreen.Invoices -> InvoiceFormDialog(item, rooms, onDismiss, onSaveInvoice)
+        AppScreen.Payments -> SubmitPaymentFormDialog(item, invoices, onDismiss, onSavePayment)
+        else -> EditItemDialog(screen, item, onDismiss, onSave)
+    }
+}
+
+
+// ─── Nhà trọ ─────────────────────────────────────────────────────────────────
+@Composable
+private fun HouseFormDialog(item: RentalItem, onDismiss: () -> Unit, onSave: (RentalItem) -> Unit) {
+    var name by remember(item) { mutableStateOf(item.title) }
+    var address by remember(item) { mutableStateOf(item.note) }
+    var roomCount by remember(item) { mutableStateOf(item.value.ifBlank { "0 phòng" }) }
+    var status by remember(item) { mutableStateOf(item.status.ifBlank { "Đang hoạt động" }) }
+    var error by remember { mutableStateOf<String?>(null) }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = {
+            Text(
+                if (item.id.isBlank()) "Thêm nhà trọ" else "Sửa nhà trọ",
+                fontWeight = FontWeight.Bold, color = Color(0xFF134E4A)
+            )
+        },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                OutlinedTextField(
+                    value = name, onValueChange = { name = it },
+                    label = { Text("Tên nhà trọ *") },
+                    modifier = Modifier.fillMaxWidth(), singleLine = true,
+                    shape = RoundedCornerShape(8.dp)
+                )
+                OutlinedTextField(
+                    value = address, onValueChange = { address = it },
+                    label = { Text("Địa chỉ") },
+                    modifier = Modifier.fillMaxWidth(), singleLine = true,
+                    shape = RoundedCornerShape(8.dp)
+                )
+                OutlinedTextField(
+                    value = roomCount, onValueChange = { roomCount = it },
+                    label = { Text("Số phòng (VD: 20 phòng)") },
+                    modifier = Modifier.fillMaxWidth(), singleLine = true,
+                    shape = RoundedCornerShape(8.dp)
+                )
+                Text("Trạng thái", style = MaterialTheme.typography.labelMedium, color = Color(0xFF64748B))
+                LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    items(listOf("Đang hoạt động", "Tạm dừng")) { s ->
+                        FilterChip(selected = status == s, onClick = { status = s }, label = { Text(s) })
+                    }
+                }
+                error?.let { Text(it, color = Color(0xFFDC2626), style = MaterialTheme.typography.bodySmall) }
+            }
+        },
+        confirmButton = {
+            Button(
+                onClick = {
+                    if (name.isBlank()) error = "Tên nhà trọ không được để trống."
+                    else onSave(item.copy(title = name.trim(), status = status, value = roomCount.trim(), note = address.trim()))
+                },
+                shape = RoundedCornerShape(8.dp),
+                colors = ButtonDefaults.buttonColors(containerColor = screenAccent(AppScreen.Houses))
+            ) { Text("Lưu nhà trọ") }
+        },
+        dismissButton = { TextButton(onClick = onDismiss) { Text("Hủy") } }
+    )
+}
+
+// ─── Loại phòng ───────────────────────────────────────────────────────────────
+@Composable
+private fun RoomTypeFormDialog(item: RentalItem, onDismiss: () -> Unit, onSave: (RentalItem) -> Unit) {
+    var name by remember(item) { mutableStateOf(item.title) }
+    var priceRange by remember(item) { mutableStateOf(item.value) }
+    var note by remember(item) { mutableStateOf(item.note) }
+    var status by remember(item) { mutableStateOf(item.status.ifBlank { "Đang dùng" }) }
+    var error by remember { mutableStateOf<String?>(null) }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = {
+            Text(
+                if (item.id.isBlank()) "Thêm loại phòng" else "Sửa loại phòng",
+                fontWeight = FontWeight.Bold, color = Color(0xFF134E4A)
+            )
+        },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                OutlinedTextField(
+                    value = name, onValueChange = { name = it },
+                    label = { Text("Tên loại phòng *") },
+                    modifier = Modifier.fillMaxWidth(), singleLine = true,
+                    shape = RoundedCornerShape(8.dp)
+                )
+                OutlinedTextField(
+                    value = priceRange, onValueChange = { priceRange = it },
+                    label = { Text("Khoảng giá (VD: 2.000.000đ - 3.500.000đ)") },
+                    modifier = Modifier.fillMaxWidth(), singleLine = true,
+                    shape = RoundedCornerShape(8.dp)
+                )
+                Text("Trạng thái", style = MaterialTheme.typography.labelMedium, color = Color(0xFF64748B))
+                LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    items(listOf("Đang dùng", "Ngừng dùng")) { s ->
+                        FilterChip(selected = status == s, onClick = { status = s }, label = { Text(s) })
+                    }
+                }
+                OutlinedTextField(
+                    value = note, onValueChange = { note = it },
+                    label = { Text("Ghi chú") },
+                    modifier = Modifier.fillMaxWidth(), minLines = 2,
+                    shape = RoundedCornerShape(8.dp)
+                )
+                error?.let { Text(it, color = Color(0xFFDC2626), style = MaterialTheme.typography.bodySmall) }
+            }
+        },
+        confirmButton = {
+            Button(
+                onClick = {
+                    if (name.isBlank()) error = "Tên loại phòng không được để trống."
+                    else onSave(item.copy(title = name.trim(), status = status, value = priceRange.trim(), note = note.trim()))
+                },
+                shape = RoundedCornerShape(8.dp),
+                colors = ButtonDefaults.buttonColors(containerColor = screenAccent(AppScreen.RoomTypes))
+            ) { Text("Lưu loại phòng") }
+        },
+        dismissButton = { TextButton(onClick = onDismiss) { Text("Hủy") } }
+    )
+}
+
+// ─── Phòng ────────────────────────────────────────────────────────────────────
+@Composable
+private fun RoomFormDialog(
+    item: RentalItem,
+    houses: List<RentalItem>,
+    onDismiss: () -> Unit,
+    onSave: (RentalItem) -> Unit
+) {
+    var name by remember(item) { mutableStateOf(item.title) }
+    var houseId by remember(item) { mutableStateOf(item.detail("houseId")) }
+    var price by remember(item) { mutableStateOf(item.value) }
+    var note by remember(item) { mutableStateOf(item.note) }
+    var status by remember(item) { mutableStateOf(item.status.ifBlank { "Còn trống" }) }
+    var error by remember { mutableStateOf<String?>(null) }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = {
+            Text(
+                if (item.id.isBlank()) "Thêm phòng" else "Sửa phòng",
+                fontWeight = FontWeight.Bold, color = Color(0xFF134E4A)
+            )
+        },
+        text = {
+            LazyColumn(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                item {
+                    OutlinedTextField(
+                        value = name, onValueChange = { name = it },
+                        label = { Text("Tên phòng * (VD: Phòng A01)") },
+                        modifier = Modifier.fillMaxWidth(), singleLine = true,
+                        shape = RoundedCornerShape(8.dp)
+                    )
+                }
+                item {
+                    if (houses.isNotEmpty()) {
+                        Text("Nhà trọ *", style = MaterialTheme.typography.labelMedium, color = Color(0xFF64748B))
+                        Spacer(Modifier.height(4.dp))
+                        LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            items(houses) { house ->
+                                FilterChip(
+                                    selected = houseId == house.id,
+                                    onClick = { houseId = house.id },
+                                    label = { Text("${house.title} (${house.id})", maxLines = 1, overflow = TextOverflow.Ellipsis) }
+                                )
+                            }
+                        }
+                    } else {
+                        OutlinedTextField(
+                            value = houseId, onValueChange = { houseId = it },
+                            label = { Text("Mã nhà trọ * (VD: NT001)") },
+                            modifier = Modifier.fillMaxWidth(), singleLine = true,
+                            shape = RoundedCornerShape(8.dp)
+                        )
+                    }
+                }
+                item {
+                    OutlinedTextField(
+                        value = price, onValueChange = { price = it },
+                        label = { Text("Giá thuê * (VD: 3.200.000đ/tháng)") },
+                        modifier = Modifier.fillMaxWidth(), singleLine = true,
+                        shape = RoundedCornerShape(8.dp)
+                    )
+                }
+                item {
+                    Text("Trạng thái", style = MaterialTheme.typography.labelMedium, color = Color(0xFF64748B))
+                    Spacer(Modifier.height(4.dp))
+                    LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        items(listOf("Còn trống", "Đã thuê", "Đang giữ chỗ", "Đang sửa chữa")) { s ->
+                            FilterChip(selected = status == s, onClick = { status = s }, label = { Text(s) })
+                        }
+                    }
+                }
+                item {
+                    OutlinedTextField(
+                        value = note, onValueChange = { note = it },
+                        label = { Text("Ghi chú (Tầng, mô tả, tiện ích, ...)") },
+                        modifier = Modifier.fillMaxWidth(), minLines = 2,
+                        shape = RoundedCornerShape(8.dp)
+                    )
+                }
+                error?.let { err ->
+                    item { Text(err, color = Color(0xFFDC2626), style = MaterialTheme.typography.bodySmall) }
+                }
+            }
+        },
+        confirmButton = {
+            Button(
+                onClick = {
+                    when {
+                        name.isBlank() -> error = "Tên phòng không được để trống."
+                        houseId.isBlank() -> error = "Vui lòng chọn nhà trọ."
+                        price.isBlank() -> error = "Giá thuê không được để trống."
+                        else -> {
+                            val detailsWithHouse = item.details
+                                .filterNot { it.first == "houseId" }
+                                .toMutableList().also { it.add(0, "houseId" to houseId) }
+                            onSave(item.copy(
+                                title = name.trim(),
+                                status = status,
+                                value = price.trim(),
+                                note = note.trim(),
+                                details = detailsWithHouse
+                            ))
+                        }
+                    }
+                },
+                shape = RoundedCornerShape(8.dp),
+                colors = ButtonDefaults.buttonColors(containerColor = screenAccent(AppScreen.Rooms))
+            ) { Text("Lưu phòng") }
+        },
+        dismissButton = { TextButton(onClick = onDismiss) { Text("Hủy") } }
+    )
+}
+
+// ─── Dịch vụ ──────────────────────────────────────────────────────────────────
+@Composable
+private fun ServiceFormDialog(item: RentalItem, onDismiss: () -> Unit, onSave: (RentalItem) -> Unit) {
+    var name by remember(item) { mutableStateOf(item.title) }
+    var unitPrice by remember(item) { mutableStateOf(item.value) }
+    var unit by remember(item) { mutableStateOf(item.detail("unit").ifBlank { "tháng" }) }
+    var note by remember(item) { mutableStateOf(item.note) }
+    var status by remember(item) { mutableStateOf(item.status.ifBlank { "Tính phí" }) }
+    var error by remember { mutableStateOf<String?>(null) }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = {
+            Text(
+                if (item.id.isBlank()) "Thêm dịch vụ" else "Sửa dịch vụ",
+                fontWeight = FontWeight.Bold, color = Color(0xFF134E4A)
+            )
+        },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                OutlinedTextField(
+                    value = name, onValueChange = { name = it },
+                    label = { Text("Tên dịch vụ * (VD: Internet, Điện, Nước)") },
+                    modifier = Modifier.fillMaxWidth(), singleLine = true,
+                    shape = RoundedCornerShape(8.dp)
+                )
+                OutlinedTextField(
+                    value = unitPrice, onValueChange = { unitPrice = it },
+                    label = { Text("Đơn giá * (VD: 100.000đ/tháng)") },
+                    modifier = Modifier.fillMaxWidth(), singleLine = true,
+                    shape = RoundedCornerShape(8.dp)
+                )
+                Text("Đơn vị tính", style = MaterialTheme.typography.labelMedium, color = Color(0xFF64748B))
+                LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    items(listOf("tháng", "phòng", "người", "kWh", "m3")) { u ->
+                        FilterChip(selected = unit == u, onClick = { unit = u }, label = { Text(u) })
+                    }
+                }
+                Text("Trạng thái", style = MaterialTheme.typography.labelMedium, color = Color(0xFF64748B))
+                LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    items(listOf("Tính phí", "Miễn phí", "Tạm dừng")) { s ->
+                        FilterChip(selected = status == s, onClick = { status = s }, label = { Text(s) })
+                    }
+                }
+                OutlinedTextField(
+                    value = note, onValueChange = { note = it },
+                    label = { Text("Ghi chú") },
+                    modifier = Modifier.fillMaxWidth(), minLines = 2,
+                    shape = RoundedCornerShape(8.dp)
+                )
+                error?.let { Text(it, color = Color(0xFFDC2626), style = MaterialTheme.typography.bodySmall) }
+            }
+        },
+        confirmButton = {
+            Button(
+                onClick = {
+                    when {
+                        name.isBlank() -> error = "Tên dịch vụ không được để trống."
+                        unitPrice.isBlank() -> error = "Đơn giá không được để trống."
+                        else -> {
+                            val newDetails = item.details.filterNot { it.first == "unit" } + ("unit" to unit)
+                            onSave(item.copy(
+                                title = name.trim(), status = status,
+                                value = unitPrice.trim(), note = note.trim(),
+                                details = newDetails
+                            ))
+                        }
+                    }
+                },
+                shape = RoundedCornerShape(8.dp),
+                colors = ButtonDefaults.buttonColors(containerColor = screenAccent(AppScreen.Services))
+            ) { Text("Lưu dịch vụ") }
+        },
+        dismissButton = { TextButton(onClick = onDismiss) { Text("Hủy") } }
+    )
+}
+
+// ─── Ghi chỉ số Điện/Nước ──────────────────────────────────────────────────
+@Composable
+private fun UtilityReadingFormDialog(
+    screen: AppScreen,
+    item: RentalItem,
+    rooms: List<RentalItem>,
+    onDismiss: () -> Unit,
+    onSaveUtility: (AppScreen, String, String, Double, Double, Double) -> Unit,
+    repository: RentalRepository
+) {
+    var roomId by remember(item) { mutableStateOf(item.detail("roomId")) }
+    var period by remember(item) { mutableStateOf(item.detail("period").ifBlank { "2026-06" }) }
+    var oldIndex by remember(item) { mutableStateOf(item.detail("oldIndex").toDoubleOrNull() ?: 0.0) }
+    var newIndexStr by remember(item) { mutableStateOf(item.detail("newIndex").ifBlank { "" }) }
+    val defaultPrice = if (screen == AppScreen.Electric) 3500.0 else 15000.0
+    var priceStr by remember(item) { mutableStateOf(item.detail("price").ifBlank { defaultPrice.toLong().toString() }) }
+    var error by remember { mutableStateOf<String?>(null) }
+    var loadingOldIndex by remember { mutableStateOf(false) }
+
+    LaunchedEffect(roomId) {
+        if (roomId.isNotBlank() && item.id.isBlank()) {
+            loadingOldIndex = true
+            repository.getLatestUtilityIndex(screen, roomId)
+                .onSuccess { oldIndex = it }
+                .onFailure { /* fallback */ }
+            loadingOldIndex = false
+        }
+    }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = {
+            Text(
+                if (item.id.isBlank()) "Ghi chỉ số ${screen.label.lowercase()}" else "Sửa chỉ số ${screen.label.lowercase()}",
+                fontWeight = FontWeight.Bold, color = Color(0xFF134E4A)
+            )
+        },
+        text = {
+            LazyColumn(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                item {
+                    if (rooms.isNotEmpty()) {
+                        Text("Chọn phòng *", style = MaterialTheme.typography.labelMedium, color = Color(0xFF64748B))
+                        Spacer(Modifier.height(4.dp))
+                        LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            items(rooms) { room ->
+                                FilterChip(
+                                    selected = roomId == room.id,
+                                    onClick = { roomId = room.id },
+                                    label = { Text(room.title) }
+                                )
+                            }
+                        }
+                    } else {
+                        OutlinedTextField(
+                            value = roomId, onValueChange = { roomId = it },
+                            label = { Text("Mã phòng * (VD: P101)") },
+                            modifier = Modifier.fillMaxWidth(), singleLine = true,
+                            shape = RoundedCornerShape(8.dp)
+                        )
+                    }
+                }
+                item {
+                    OutlinedTextField(
+                        value = period, onValueChange = { period = it },
+                        label = { Text("Kỳ ghi chỉ số * (VD: 2026-06)") },
+                        modifier = Modifier.fillMaxWidth(), singleLine = true,
+                        shape = RoundedCornerShape(8.dp)
+                    )
+                }
+                item {
+                    Row(horizontalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.fillMaxWidth()) {
+                        OutlinedTextField(
+                            value = if (loadingOldIndex) "Đang tải..." else oldIndex.toString(),
+                            onValueChange = {},
+                            label = { Text("Chỉ số cũ") },
+                            enabled = false,
+                            modifier = Modifier.weight(1f),
+                            shape = RoundedCornerShape(8.dp)
+                        )
+                        OutlinedTextField(
+                            value = newIndexStr,
+                            onValueChange = { newIndexStr = it },
+                            label = { Text("Chỉ số mới *") },
+                            modifier = Modifier.weight(1f),
+                            singleLine = true,
+                            shape = RoundedCornerShape(8.dp)
+                        )
+                    }
+                }
+                item {
+                    OutlinedTextField(
+                        value = priceStr, onValueChange = { priceStr = it },
+                        label = { Text("Đơn giá (${if (screen == AppScreen.Electric) "đ/kWh" else "đ/m3"})") },
+                        modifier = Modifier.fillMaxWidth(), singleLine = true,
+                        shape = RoundedCornerShape(8.dp)
+                    )
+                }
+                error?.let { err ->
+                    item { Text(err, color = Color(0xFFDC2626), style = MaterialTheme.typography.bodySmall) }
+                }
+            }
+        },
+        confirmButton = {
+            Button(
+                onClick = {
+                    val newIndex = newIndexStr.toDoubleOrNull()
+                    val price = priceStr.toDoubleOrNull()
+                    when {
+                        roomId.isBlank() -> error = "Vui lòng chọn phòng."
+                        period.isBlank() -> error = "Vui lòng nhập kỳ ghi."
+                        newIndex == null -> error = "Vui lòng nhập chỉ số mới hợp lệ."
+                        newIndex < oldIndex -> error = "Chỉ số mới không được nhỏ hơn chỉ số cũ."
+                        price == null || price <= 0 -> error = "Vui lòng nhập đơn giá hợp lệ."
+                        else -> {
+                            onSaveUtility(screen, roomId, period.trim(), oldIndex, newIndex, price)
+                        }
+                    }
+                },
+                shape = RoundedCornerShape(8.dp),
+                colors = ButtonDefaults.buttonColors(containerColor = screenAccent(screen))
+            ) { Text("Lưu chỉ số") }
+        },
+        dismissButton = { TextButton(onClick = onDismiss) { Text("Hủy") } }
+    )
+}
+
+// ─── Lập Hóa Đơn ─────────────────────────────────────────────────────────────
+@Composable
+private fun InvoiceFormDialog(
+    item: RentalItem,
+    rooms: List<RentalItem>,
+    onDismiss: () -> Unit,
+    onSaveInvoice: (String, String, Double, String) -> Unit
+) {
+    var roomId by remember(item) { mutableStateOf(item.detail("roomId")) }
+    var period by remember(item) { mutableStateOf(item.detail("period").ifBlank { "2026-06" }) }
+    var otherCostStr by remember(item) { mutableStateOf(item.detail("otherCost").ifBlank { "0" }) }
+    var otherNote by remember(item) { mutableStateOf(item.detail("otherNote")) }
+    var error by remember { mutableStateOf<String?>(null) }
+
+    val selectedRoom = rooms.firstOrNull { it.id == roomId }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = {
+            Text(
+                if (item.id.isBlank()) "Tạo hóa đơn" else "Sửa hóa đơn",
+                fontWeight = FontWeight.Bold, color = Color(0xFF134E4A)
+            )
+        },
+        text = {
+            LazyColumn(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                item {
+                    if (rooms.isNotEmpty()) {
+                        val rentedRooms = rooms.filter { it.status.equals("Đã thuê", true) || it.detail("tenantUsername").isNotBlank() }
+                        Text("Chọn phòng thuê *", style = MaterialTheme.typography.labelMedium, color = Color(0xFF64748B))
+                        Spacer(Modifier.height(4.dp))
+                        LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            items(rentedRooms) { room ->
+                                FilterChip(
+                                    selected = roomId == room.id,
+                                    onClick = { roomId = room.id },
+                                    label = { Text("${room.title} (${room.id})") }
+                                )
+                            }
+                        }
+                        if (rentedRooms.isEmpty()) {
+                            Text("Không có phòng nào đang được thuê.", color = Color(0xFFDC2626), style = MaterialTheme.typography.bodySmall)
+                        }
+                    } else {
+                        OutlinedTextField(
+                            value = roomId, onValueChange = { roomId = it },
+                            label = { Text("Mã phòng * (VD: P101)") },
+                            modifier = Modifier.fillMaxWidth(), singleLine = true,
+                            shape = RoundedCornerShape(8.dp)
+                        )
+                    }
+                }
+                item {
+                    OutlinedTextField(
+                        value = period, onValueChange = { period = it },
+                        label = { Text("Kỳ hóa đơn * (VD: 2026-06)") },
+                        modifier = Modifier.fillMaxWidth(), singleLine = true,
+                        shape = RoundedCornerShape(8.dp)
+                    )
+                }
+                item {
+                    OutlinedTextField(
+                        value = otherCostStr, onValueChange = { otherCostStr = it },
+                        label = { Text("Chi phí phát sinh (nếu có)") },
+                        modifier = Modifier.fillMaxWidth(), singleLine = true,
+                        shape = RoundedCornerShape(8.dp)
+                    )
+                }
+                item {
+                    OutlinedTextField(
+                        value = otherNote, onValueChange = { otherNote = it },
+                        label = { Text("Lý do phát sinh / Ghi chú") },
+                        modifier = Modifier.fillMaxWidth(), minLines = 2,
+                        shape = RoundedCornerShape(8.dp)
+                    )
+                }
+                
+                selectedRoom?.let { room ->
+                    val rPrice = moneyValue(room.value)
+                    item {
+                        Card(
+                            shape = RoundedCornerShape(8.dp),
+                            colors = CardDefaults.cardColors(containerColor = Color(0xFFF0FDF4)),
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Column(modifier = Modifier.padding(10.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                                Text("Thông tin tạm tính:", fontWeight = FontWeight.Bold, color = Color(0xFF166534))
+                                Text("• Tiền phòng: ${com.example.myapplication.domain.util.formatMoney(rPrice)}")
+                                Text("• Tiền điện/nước/dịch vụ: Sẽ tự động đối chiếu theo kỳ $period", style = MaterialTheme.typography.bodySmall, color = Color(0xFF166534))
+                                val extra = otherCostStr.toDoubleOrNull() ?: 0.0
+                                if (extra > 0) {
+                                    Text("• Phát sinh: ${com.example.myapplication.domain.util.formatMoney(extra.toLong())}")
+                                }
+                            }
+                        }
+                    }
+                }
+                
+                error?.let { err ->
+                    item { Text(err, color = Color(0xFFDC2626), style = MaterialTheme.typography.bodySmall) }
+                }
+            }
+        },
+        confirmButton = {
+            Button(
+                onClick = {
+                    val otherCost = otherCostStr.toDoubleOrNull() ?: 0.0
+                    when {
+                        roomId.isBlank() -> error = "Vui lòng chọn phòng."
+                        period.isBlank() -> error = "Vui lòng nhập kỳ hóa đơn."
+                        otherCostStr.isNotBlank() && otherCostStr.toDoubleOrNull() == null -> error = "Chi phí phát sinh phải là số hợp lệ."
+                        else -> {
+                            onSaveInvoice(roomId, period.trim(), otherCost, otherNote.trim())
+                        }
+                    }
+                },
+                shape = RoundedCornerShape(8.dp),
+                colors = ButtonDefaults.buttonColors(containerColor = screenAccent(AppScreen.Invoices))
+            ) { Text("Tạo hóa đơn") }
+        },
+        dismissButton = { TextButton(onClick = onDismiss) { Text("Hủy") } }
+    )
+}
+
+// ─── Gửi Biên Lai Thanh Toán ──────────────────────────────────────────────────
+@Composable
+private fun SubmitPaymentFormDialog(
+    item: RentalItem,
+    invoices: List<RentalItem>,
+    onDismiss: () -> Unit,
+    onSavePayment: (String, String, String, String) -> Unit
+) {
+    var invoiceId by remember(item) { mutableStateOf(item.detail("invoiceId")) }
+    var transactionId by remember(item) { mutableStateOf(item.detail("transactionId")) }
+    var note by remember(item) { mutableStateOf(item.note) }
+    var receiptImage by remember(item) { mutableStateOf(item.detail("receiptImage")) }
+    var error by remember { mutableStateOf<String?>(null) }
+
+    val unpaidInvoices = invoices.filter { it.status != "Đã thanh toán" }
+    val selectedInvoice = invoices.firstOrNull { it.id == invoiceId }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = {
+            Text(
+                "Gửi biên lai thanh toán",
+                fontWeight = FontWeight.Bold, color = Color(0xFF134E4A)
+            )
+        },
+        text = {
+            LazyColumn(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                item {
+                    if (unpaidInvoices.isNotEmpty()) {
+                        Text("Chọn hóa đơn thanh toán *", style = MaterialTheme.typography.labelMedium, color = Color(0xFF64748B))
+                        Spacer(Modifier.height(4.dp))
+                        LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            items(unpaidInvoices) { inv ->
+                                FilterChip(
+                                    selected = invoiceId == inv.id,
+                                    onClick = { invoiceId = inv.id },
+                                    label = { Text("${inv.title} (${inv.value})") }
+                                )
+                            }
+                        }
+                    } else {
+                        OutlinedTextField(
+                            value = invoiceId,
+                            onValueChange = { invoiceId = it },
+                            label = { Text("Mã hóa đơn * (VD: HD001)") },
+                            modifier = Modifier.fillMaxWidth(),
+                            singleLine = true,
+                            shape = RoundedCornerShape(8.dp)
+                        )
+                    }
+                }
+                
+                selectedInvoice?.let { inv ->
+                    item {
+                        Card(
+                            shape = RoundedCornerShape(8.dp),
+                            colors = CardDefaults.cardColors(containerColor = Color(0xFFFFF7ED)),
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Column(modifier = Modifier.padding(10.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                                Text("Thông tin thanh toán:", fontWeight = FontWeight.Bold, color = Color(0xFF9A3412))
+                                Text("• Số tiền cần nộp: ${inv.value}", fontWeight = FontWeight.SemiBold, color = Color(0xFFC2410C))
+                                Text("• Chi tiết: ${inv.note}", style = MaterialTheme.typography.bodySmall)
+                            }
+                        }
+                    }
+                }
+
+                item {
+                    OutlinedTextField(
+                        value = transactionId, onValueChange = { transactionId = it },
+                        label = { Text("Mã giao dịch ngân hàng / Ref *") },
+                        modifier = Modifier.fillMaxWidth(), singleLine = true,
+                        shape = RoundedCornerShape(8.dp)
+                    )
+                }
+                
+                item {
+                    OutlinedTextField(
+                        value = note, onValueChange = { note = it },
+                        label = { Text("Nội dung ghi chú chuyển khoản") },
+                        modifier = Modifier.fillMaxWidth(), minLines = 2,
+                        shape = RoundedCornerShape(8.dp)
+                    )
+                }
+
+                item {
+                    Text("Ảnh biên lai (Mô phỏng đính kèm)", style = MaterialTheme.typography.labelMedium, color = Color(0xFF64748B))
+                    Spacer(Modifier.height(4.dp))
+                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                        Button(
+                            onClick = { receiptImage = "data:image/png;base64,iVBORw0KGgoAAA..." },
+                            shape = RoundedCornerShape(8.dp),
+                            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF64748B))
+                        ) {
+                            Text(if (receiptImage.isBlank()) "Đính kèm ảnh" else "Đã đính kèm ảnh")
+                        }
+                        if (receiptImage.isNotBlank()) {
+                            Text("✓ Đã chọn file ảnh", color = Color(0xFF059669), style = MaterialTheme.typography.bodySmall)
+                        }
+                    }
+                }
+                
+                error?.let { err ->
+                    item { Text(err, color = Color(0xFFDC2626), style = MaterialTheme.typography.bodySmall) }
+                }
+            }
+        },
+        confirmButton = {
+            Button(
+                onClick = {
+                    when {
+                        invoiceId.isBlank() -> error = "Vui lòng chọn hóa đơn."
+                        transactionId.isBlank() -> error = "Vui lòng nhập mã giao dịch ngân hàng."
+                        else -> {
+                            onSavePayment(invoiceId, transactionId.trim(), receiptImage, note.trim())
+                        }
+                    }
+                },
+                shape = RoundedCornerShape(8.dp),
+                colors = ButtonDefaults.buttonColors(containerColor = screenAccent(AppScreen.Payments))
+            ) { Text("Gửi biên lai") }
+        },
+        dismissButton = { TextButton(onClick = onDismiss) { Text("Hủy") } }
+    )
+}
+
+// ─── Từ Chối Biên Lai Thanh Toán ──────────────────────────────────────────────
+@Composable
+private fun RejectPaymentDialog(onDismiss: () -> Unit, onSubmit: (String) -> Unit) {
+    var reason by remember { mutableStateOf("") }
+    var error by remember { mutableStateOf<String?>(null) }
+    
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Từ chối thanh toán", fontWeight = FontWeight.Bold, color = Color(0xFFDC2626)) },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text("Vui lòng nhập lý do từ chối thanh toán để gửi đến người thuê:")
+                OutlinedTextField(
+                    value = reason,
+                    onValueChange = { reason = it },
+                    label = { Text("Lý do từ chối *") },
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(8.dp)
+                )
+                error?.let { Text(it, color = Color(0xFFDC2626), style = MaterialTheme.typography.bodySmall) }
+            }
+        },
+        confirmButton = {
+            Button(
+                onClick = {
+                    if (reason.isBlank()) {
+                        error = "Lý do không được để trống."
+                    } else {
+                        onSubmit(reason.trim())
+                    }
+                },
+                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFDC2626)),
+                shape = RoundedCornerShape(8.dp)
+            ) {
+                Text("Gửi từ chối", color = Color.White)
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) { Text("Hủy") }
+        }
+    )
+}
+
 @Composable
 private fun EditItemDialog(screen: AppScreen, item: RentalItem, onDismiss: () -> Unit, onSave: (RentalItem) -> Unit) {
     var title by remember(item) { mutableStateOf(item.title) }
@@ -1713,7 +2696,10 @@ private fun canManageScreen(role: UserRole, screen: AppScreen): Boolean = when (
         AppScreen.Incidents,
         AppScreen.Notices
     )
-    UserRole.NguoiDung -> false
+    UserRole.NguoiDung -> screen in setOf(
+        AppScreen.Payments,
+        AppScreen.Incidents
+    )
 }
 
 private fun sourceLabel(source: DataSource): String = when (source) {
@@ -1762,3 +2748,9 @@ private fun screenAccent(screen: AppScreen): Color = when (screen) {
 }
 
 private fun RentalItem.detail(key: String): String = details.firstOrNull { it.first == key }?.second.orEmpty()
+
+private data class ConfirmData(
+    val title: String,
+    val message: String,
+    val onConfirm: () -> Unit
+)
