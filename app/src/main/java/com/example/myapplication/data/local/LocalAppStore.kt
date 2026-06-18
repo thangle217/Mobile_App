@@ -501,11 +501,264 @@ class LocalAppStore(context: Context) {
         return nextRequest
     }
 
+    fun getLatestUtilityIndex(screen: AppScreen, roomId: String): Double {
+        val readings = list(screen)
+        val roomReadings = readings.filter { it.detail("roomId") == roomId }
+        if (roomReadings.isEmpty()) return 0.0
+        val sorted = roomReadings.sortedByDescending { it.detail("period") }
+        return sorted.first().detail("newIndex").toDoubleOrNull() ?: 0.0
+    }
+
+    fun saveUtilityReading(
+        screen: AppScreen,
+        roomId: String,
+        period: String,
+        oldIndex: Double,
+        newIndex: Double,
+        price: Double
+    ): RentalItem {
+        val room = list(AppScreen.Rooms).firstOrNull { it.id == roomId } ?: error("Không tìm thấy phòng.")
+        val roomName = room.title
+        val tenantUsername = room.detail("tenantUsername")
+        val consumption = (newIndex - oldIndex).coerceAtLeast(0.0)
+        val amount = consumption * price
+        val unit = if (screen == AppScreen.Electric) "kWh" else "m3"
+
+        val id = nextId(screen)
+        val title = "${if (screen == AppScreen.Electric) "Điện" else "Nước"} $roomName kỳ $period"
+
+        val reading = RentalItem(
+            id = id,
+            title = title,
+            status = "Đã ghi",
+            value = "${consumption.toLong()} $unit x ${com.example.myapplication.domain.util.formatMoney(price.toLong())}",
+            note = com.example.myapplication.domain.util.formatMoney(amount.toLong()),
+            details = listOf(
+                "roomId" to roomId,
+                "roomName" to roomName,
+                "period" to period,
+                "oldIndex" to oldIndex.toString(),
+                "newIndex" to newIndex.toString(),
+                "consumption" to consumption.toString(),
+                "price" to price.toString(),
+                "amount" to amount.toString(),
+                "tenantUsername" to tenantUsername
+            )
+        )
+
+        upsert(screen, reading)
+        return reading
+    }
+
+    fun createInvoice(
+        roomId: String,
+        period: String,
+        otherCost: Double,
+        otherNote: String
+    ): RentalItem {
+        val room = list(AppScreen.Rooms).firstOrNull { it.id == roomId } ?: error("Không tìm thấy phòng.")
+        val tenantUsername = room.detail("tenantUsername")
+        require(tenantUsername.isNotBlank()) { "Phòng này hiện chưa có người thuê." }
+
+        // Chặn trùng hóa đơn
+        val exists = list(AppScreen.Invoices).any {
+            it.detail("roomId") == roomId && it.detail("period") == period
+        }
+        require(!exists) { "Hóa đơn phòng ${room.title} kỳ $period đã tồn tại." }
+
+        val roomPrice = moneyValue(room.value)
+
+        // Lấy tiền điện
+        val electricItem = list(AppScreen.Electric).firstOrNull {
+            it.detail("roomId") == roomId && it.detail("period") == period
+        }
+        val electricCost = electricItem?.detail("amount")?.toDoubleOrNull()?.toLong()
+            ?: electricItem?.let { moneyValue(it.note) }
+            ?: 0L
+
+        // Lấy tiền nước
+        val waterItem = list(AppScreen.Water).firstOrNull {
+            it.detail("roomId") == roomId && it.detail("period") == period
+        }
+        val waterCost = waterItem?.detail("amount")?.toDoubleOrNull()?.toLong()
+            ?: waterItem?.let { moneyValue(it.note) }
+            ?: 0L
+
+        // Tiền dịch vụ
+        val serviceRegs = list(AppScreen.ServiceRegs).filter {
+            it.detail("roomId") == roomId ||
+            it.title.contains(roomId, true) ||
+            it.title.contains(room.title, true)
+        }
+        val servicesCost = serviceRegs.sumOf { moneyValue(it.value) }
+
+        val totalAmount = roomPrice + electricCost + waterCost + servicesCost + otherCost.toLong()
+
+        val id = nextId(AppScreen.Invoices)
+        val title = "Hóa đơn ${room.title} kỳ $period"
+
+        val summaryNote = buildString {
+            append("Tiền phòng: ${com.example.myapplication.domain.util.formatMoney(roomPrice)}")
+            if (electricCost > 0) append(" + Điện: ${com.example.myapplication.domain.util.formatMoney(electricCost)}")
+            if (waterCost > 0) append(" + Nước: ${com.example.myapplication.domain.util.formatMoney(waterCost)}")
+            if (servicesCost > 0) append(" + Dịch vụ: ${com.example.myapplication.domain.util.formatMoney(servicesCost)}")
+            if (otherCost > 0) {
+                append(" + Phát sinh: ${com.example.myapplication.domain.util.formatMoney(otherCost.toLong())}")
+                if (otherNote.isNotBlank()) append(" (${otherNote})")
+            }
+        }
+
+        val invoice = RentalItem(
+            id = id,
+            title = title,
+            status = "Chưa thanh toán",
+            value = com.example.myapplication.domain.util.formatMoney(totalAmount),
+            note = summaryNote,
+            details = listOf(
+                "roomId" to roomId,
+                "roomName" to room.title,
+                "period" to period,
+                "roomPrice" to roomPrice.toString(),
+                "electricCost" to electricCost.toString(),
+                "waterCost" to waterCost.toString(),
+                "servicesCost" to servicesCost.toString(),
+                "otherCost" to otherCost.toString(),
+                "totalAmount" to totalAmount.toString(),
+                "tenantUsername" to tenantUsername,
+                "otherNote" to otherNote
+            )
+        )
+
+        upsert(AppScreen.Invoices, invoice)
+
+        // Tạo thông báo cho người thuê
+        upsert(
+            AppScreen.Notices,
+            RentalItem(
+                id = nextId(AppScreen.Notices),
+                title = "Hóa đơn mới kỳ $period",
+                status = "Mới",
+                value = "Hóa đơn",
+                note = "Hóa đơn cho ${room.title} kỳ $period đã được lập. Số tiền: ${com.example.myapplication.domain.util.formatMoney(totalAmount)}.",
+                details = listOf(
+                    "targetUser" to tenantUsername,
+                    "invoiceId" to invoice.id
+                )
+            )
+        )
+
+        return invoice
+    }
+
+    fun submitPayment(
+        invoiceId: String,
+        transactionId: String,
+        receiptImage: String,
+        note: String,
+        session: UserSession
+    ): RentalItem {
+        val invoice = list(AppScreen.Invoices).firstOrNull { it.id == invoiceId } ?: error("Không tìm thấy hóa đơn.")
+        val roomId = invoice.detail("roomId")
+        val room = list(AppScreen.Rooms).firstOrNull { it.id == roomId } ?: error("Không tìm thấy phòng.")
+
+        val id = nextId(AppScreen.Payments)
+        val title = "Biên lai ${room.title} kỳ ${invoice.detail("period")}"
+
+        val payment = RentalItem(
+            id = id,
+            title = title,
+            status = "Chờ xác nhận",
+            value = invoice.value,
+            note = "Mã GD: $transactionId${if (note.isNotBlank()) " | $note" else ""}",
+            details = listOf(
+                "invoiceId" to invoiceId,
+                "roomId" to roomId,
+                "roomName" to room.title,
+                "period" to invoice.detail("period"),
+                "tenantUsername" to session.username,
+                "tenantName" to session.displayName,
+                "transactionId" to transactionId,
+                "receiptImage" to receiptImage
+            )
+        )
+
+        upsert(AppScreen.Payments, payment)
+
+        // Cập nhật trạng thái hóa đơn sang "Chờ xác nhận"
+        upsert(AppScreen.Invoices, invoice.copy(status = "Chờ xác nhận"))
+
+        // Thông báo cho chủ trọ
+        upsert(
+            AppScreen.Notices,
+            RentalItem(
+                id = nextId(AppScreen.Notices),
+                title = "Biên lai thanh toán mới từ ${session.displayName}",
+                status = "Mới",
+                value = "Thanh toán",
+                note = "${session.displayName} đã gửi biên lai cho ${room.title}. Số tiền: ${invoice.value}.",
+                details = listOf(
+                    "targetRole" to UserRole.ChuTro.name,
+                    "paymentId" to payment.id
+                )
+            )
+        )
+
+        return payment
+    }
+
+    fun decidePayment(
+        paymentId: String,
+        approve: Boolean,
+        rejectReason: String?,
+        session: UserSession
+    ): RentalItem {
+        val payment = list(AppScreen.Payments).firstOrNull { it.id == paymentId } ?: error("Không tìm thấy biên lai thanh toán.")
+        require(payment.status == "Chờ xác nhận") { "Biên lai này đã được xử lý." }
+
+        val invoiceId = payment.detail("invoiceId")
+        val invoice = list(AppScreen.Invoices).firstOrNull { it.id == invoiceId } ?: error("Không tìm thấy hóa đơn liên kết.")
+
+        val nextPayment = payment.copy(
+            status = if (approve) "Đã xác nhận" else "Từ chối",
+            note = payment.note + (if (approve) "\nĐã duyệt bởi ${session.displayName}." else "\nBị từ chối bởi ${session.displayName}. Lý do: ${rejectReason.orEmpty()}")
+        )
+        upsert(AppScreen.Payments, nextPayment)
+
+        val nextInvoice = invoice.copy(
+            status = if (approve) "Đã thanh toán" else "Chưa thanh toán",
+            note = invoice.note + (if (approve) "" else " (Bị từ chối thanh toán: ${rejectReason.orEmpty()})")
+        )
+        upsert(AppScreen.Invoices, nextInvoice)
+
+        // Thông báo cho người thuê
+        val tenantUsername = payment.detail("tenantUsername")
+        upsert(
+            AppScreen.Notices,
+            RentalItem(
+                id = nextId(AppScreen.Notices),
+                title = if (approve) "Thanh toán hóa đơn thành công" else "Biên lai thanh toán bị từ chối",
+                status = "Mới",
+                value = "Thanh toán",
+                note = if (approve) "Hóa đơn kỳ ${payment.detail("period")} đã được xác nhận thanh toán." else "Lý do: ${rejectReason.orEmpty()}",
+                details = listOf(
+                    "targetUser" to tenantUsername,
+                    "paymentId" to payment.id
+                )
+            )
+        )
+
+        return payment
+    }
+
     private fun seedIfNeeded() {
-        if (prefs.getBoolean("seeded", false)) {
+        val currentVersion = prefs.getInt("seed_version", 0)
+        val targetVersion = 3
+        if (currentVersion >= targetVersion) {
             migrateDemoLinksIfNeeded()
             return
         }
+        // Xóa dữ liệu cũ và seed lại khi version thay đổi
+        prefs.edit().clear().apply()
         saveUsers(
             JSONArray()
                 .put(seedUser(1, "Admin", "Admin123", UserRole.Admin, "Admin hệ thống", "admin@demo.local"))
@@ -513,7 +766,10 @@ class LocalAppStore(context: Context) {
                 .put(seedUser(3, "nguoithue", "123456", UserRole.NguoiDung, "Người Thuê Demo", "nguoithue@example.com"))
         )
         saveItems(seedItems())
-        prefs.edit().putBoolean("seeded", true).apply()
+        prefs.edit()
+            .putBoolean("seeded", true)
+            .putInt("seed_version", targetVersion)
+            .apply()
     }
 
     private fun migrateDemoLinksIfNeeded() {
