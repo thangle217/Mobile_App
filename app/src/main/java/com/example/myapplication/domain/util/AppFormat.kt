@@ -59,3 +59,14 @@ fun normalizeStatus(status: String): String = when (status.trim()) {
     "Binh thuong" -> "Bình thường"
     else -> status
 }
+
+fun isValidEmail(email: String): Boolean {
+    val emailRegex = "^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\\.[A-Za-z]{2,6}$".toRegex()
+    return email.trim().matches(emailRegex)
+}
+
+fun isValidPhone(phone: String): Boolean {
+    val phoneRegex = "^(0|\\+84)[35789][0-9]{8}$".toRegex()
+    return phone.trim().matches(phoneRegex)
+}
+
