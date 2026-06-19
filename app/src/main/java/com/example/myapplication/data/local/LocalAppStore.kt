@@ -859,6 +859,10 @@ class LocalAppStore(context: Context) {
                 .put(seedUser(1, "Admin", "Admin123", UserRole.Admin, "Admin hệ thống", "admin@demo.local"))
                 .put(seedUser(2, "chutro", "123456", UserRole.ChuTro, "Nguyễn Minh Quân", "chutro@example.com"))
                 .put(seedUser(3, "nguoithue", "123456", UserRole.NguoiDung, "Người Thuê Demo", "nguoithue@example.com"))
+                .put(seedUser(4, "chutro1", "123456", UserRole.ChuTro, "Trần Quốc Tuấn", "tuantq@gmail.com", "0912345678", "012345678901", "15/08/1985", "Nam", "Việt Nam", "123 Đường Láng, Đống Đa, Hà Nội", "Tự do", "Vietcombank", "VCB", "1011121314", "TRAN QUOC TUAN", "chutro1 thanh toan"))
+                .put(seedUser(5, "chutro2", "123456", UserRole.ChuTro, "Lê Thị Hồng", "honglt@gmail.com", "0987654321", "098765432109", "20/11/1990", "Nữ", "Việt Nam", "456 Điện Biên Phủ, Quận 3, TP.HCM", "Kinh doanh", "Techcombank", "TCB", "190220330440", "LE THI HONG", "chutro2 thanh toan"))
+                .put(seedUser(6, "nguoithue1", "123456", UserRole.NguoiDung, "Phạm Văn Nam", "nampv@gmail.com", "0905123456", "034567890123", "10/02/1998", "Nam", "Việt Nam", "789 Cách Mạng Tháng 8, Quận 10, TP.HCM", "FPT Software", "MB Bank", "MBB", "999988887777", "PHAM VAN NAM", "nguoithue1 chuyen khoan"))
+                .put(seedUser(7, "nguoithue2", "123456", UserRole.NguoiDung, "Nguyễn Thu Thảo", "thaont@gmail.com", "0934567890", "079876543210", "05/05/2001", "Nữ", "Việt Nam", "321 Lê Lợi, Hải Châu, Đà Nẵng", "Đại học Bách Khoa", "VietinBank", "CTG", "108888777666", "NGUYEN THU THAO", "nguoithue2 chuyen khoan"))
         )
         saveItems(seedItems())
         prefs.edit()
@@ -901,7 +905,26 @@ class LocalAppStore(context: Context) {
         )
     }
 
-    private fun seedUser(id: Int, username: String, password: String, role: UserRole, fullName: String, email: String): JSONObject {
+    private fun seedUser(
+        id: Int,
+        username: String,
+        password: String,
+        role: UserRole,
+        fullName: String,
+        email: String,
+        phone: String = "",
+        cccd: String = "",
+        dateOfBirth: String = "",
+        gender: String = "",
+        nationality: String = "",
+        address: String = "",
+        workplace: String = "",
+        bankName: String = "",
+        bankCode: String = "",
+        bankAccount: String = "",
+        bankOwner: String = "",
+        transferContent: String = ""
+    ): JSONObject {
         return JSONObject()
             .put("id", id)
             .put("username", username)
@@ -909,8 +932,18 @@ class LocalAppStore(context: Context) {
             .put("role", role.name)
             .put("fullName", fullName)
             .put("email", email)
-            .put("phone", "")
-            .put("cccd", "")
+            .put("phone", phone)
+            .put("cccd", cccd)
+            .put("dateOfBirth", dateOfBirth)
+            .put("gender", gender)
+            .put("nationality", nationality)
+            .put("address", address)
+            .put("workplace", workplace)
+            .put("bankName", bankName)
+            .put("bankCode", bankCode)
+            .put("bankAccount", bankAccount)
+            .put("bankOwner", bankOwner)
+            .put("transferContent", transferContent)
     }
 
     private fun seedItems(): JSONObject {
