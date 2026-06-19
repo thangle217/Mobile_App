@@ -16,9 +16,17 @@ import java.io.IOException
 
 private val Context.sessionDataStore: DataStore<Preferences> by preferencesDataStore(name = "session")
 
+/**
+ * Manages user sessions locally using Android Jetpack DataStore Preferences.
+ * Provides a reactive stream of the current active session and functions to persist or clear it.
+ */
 class SessionStore(context: Context) {
     private val dataStore = context.sessionDataStore
 
+    /**
+     * A reactive flow emitting the current [UserSession] if the user is logged in,
+     * or `null` if the user is logged out or session is empty.
+     */
     val session: Flow<UserSession?> = dataStore.data
         .catch { error ->
             if (error is IOException) emit(emptyPreferences()) else throw error
@@ -37,6 +45,9 @@ class SessionStore(context: Context) {
             }
         }
 
+    /**
+     * Persists the given [UserSession] details into the encrypted/local DataStore.
+     */
     suspend fun save(session: UserSession) {
         dataStore.edit { preferences ->
             preferences[Keys.Token] = session.token
@@ -46,9 +57,13 @@ class SessionStore(context: Context) {
         }
     }
 
+    /**
+     * Clears all session preferences, effectively logging the user out.
+     */
     suspend fun clear() {
         dataStore.edit { it.clear() }
     }
+
 
     private object Keys {
         val Token = stringPreferencesKey("token")
