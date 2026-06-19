@@ -750,9 +750,104 @@ class LocalAppStore(context: Context) {
         return payment
     }
 
+    // ─── Mốc D: Sự cố & Thông báo ────────────────────────────────────────────
+
+    fun respondToIncident(
+        incidentId: String,
+        response: String,
+        newStatus: String,
+        session: UserSession
+    ): RentalItem {
+        val incident = list(AppScreen.Incidents).firstOrNull { it.id == incidentId }
+            ?: error("Không tìm thấy sự cố.")
+        val now = java.text.SimpleDateFormat("dd/MM/yyyy HH:mm", java.util.Locale.getDefault())
+            .format(java.util.Date())
+        val updatedNote = incident.note + "\n[${session.displayName} - $now]: $response"
+        val updated = incident.copy(
+            status = newStatus,
+            note = updatedNote,
+            details = incident.details
+                .replaceDetail("responseBy", session.displayName)
+                .replaceDetail("responseAt", now)
+                .replaceDetail("response", response)
+        )
+        upsert(AppScreen.Incidents, updated)
+
+        // Thông báo cho người thuê
+        val tenantUsername = incident.detail("tenantUsername")
+        if (tenantUsername.isNotBlank()) {
+            upsert(
+                AppScreen.Notices,
+                RentalItem(
+                    id = nextId(AppScreen.Notices),
+                    title = "Cập nhật sự cố: ${incident.title}",
+                    status = "Mới",
+                    value = "Sự cố",
+                    note = "Phản hồi từ ${session.displayName}: $response (Trạng thái: $newStatus)",
+                    details = listOf(
+                        "targetUser" to tenantUsername,
+                        "incidentId" to incidentId
+                    )
+                )
+            )
+        }
+        return updated
+    }
+
+    fun markNoticeAsRead(noticeId: String, username: String): RentalItem {
+        val notice = list(AppScreen.Notices).firstOrNull { it.id == noticeId }
+            ?: error("Không tìm thấy thông báo.")
+        val readKey = "readBy_$username"
+        if (notice.detail(readKey) == "true") return notice
+        val updated = notice.copy(
+            status = if (notice.detail("targetUser").isBlank()) notice.status else "Đã đọc",
+            details = notice.details.replaceDetail(readKey, "true")
+        )
+        upsert(AppScreen.Notices, updated)
+        return updated
+    }
+
+    fun createNotice(
+        title: String,
+        content: String,
+        targetType: String, // "all", "room:<roomId>", "user:<username>"
+        session: UserSession
+    ): RentalItem {
+        require(title.isNotBlank()) { "Tiêu đề thông báo không được để trống." }
+        require(content.isNotBlank()) { "Nội dung thông báo không được để trống." }
+
+        val targetUser = if (targetType.startsWith("user:")) targetType.removePrefix("user:") else ""
+        val targetRoom = if (targetType.startsWith("room:")) targetType.removePrefix("room:") else ""
+
+        val notice = RentalItem(
+            id = nextId(AppScreen.Notices),
+            title = title,
+            status = "Mới",
+            value = "Thông báo",
+            note = content,
+            details = listOf(
+                "targetUser" to targetUser,
+                "targetRoom" to targetRoom,
+                "targetType" to targetType,
+                "createdBy" to session.displayName
+            )
+        )
+        upsert(AppScreen.Notices, notice)
+        return notice
+    }
+
+    fun unreadNoticeCount(username: String): Int {
+        val items = list(AppScreen.Notices)
+        return items.count { notice ->
+            val forUser = notice.detail("targetUser").let { it.isBlank() || it == username }
+            val notRead = notice.detail("readBy_$username") != "true"
+            forUser && notRead
+        }
+    }
+
     private fun seedIfNeeded() {
         val currentVersion = prefs.getInt("seed_version", 0)
-        val targetVersion = 3
+        val targetVersion = 4
         if (currentVersion >= targetVersion) {
             migrateDemoLinksIfNeeded()
             return
@@ -833,10 +928,14 @@ class LocalAppStore(context: Context) {
         obj.put(AppScreen.ServiceRegs.name, JSONArray().put(item("DK001", "P101 dùng Internet", "Đang sử dụng", "100.000đ/tháng", "Đăng ký kỳ 2026-05")))
         obj.put(AppScreen.Electric.name, JSONArray().put(item("D001", "Điện P101 kỳ 2026-05", "Đã ghi", "70 kWh x 3.500đ", "245.000đ")))
         obj.put(AppScreen.Water.name, JSONArray().put(item("N001", "Nước P101 kỳ 2026-05", "Đã ghi", "6 m3 x 15.000đ", "90.000đ")))
-        obj.put(AppScreen.RentRequests.name, JSONArray().put(item("YT001", "Lê Văn Nam muốn thuê P102", "Chờ duyệt", "6 tháng", "Muốn vào ngày 10/06/2026")))
-        obj.put(AppScreen.RenewRequests.name, JSONArray().put(item("GH001", "Gia hạn hợp đồng P101", "Chờ duyệt", "Thêm 6 tháng", "Người thuê muốn giữ phòng")))
-        obj.put(AppScreen.Incidents.name, JSONArray().put(item("SC001", "Rò nước trong phòng P101", "Mới", "Rất gấp", "Người thuê vừa báo cáo")))
-        obj.put(AppScreen.Notices.name, JSONArray().put(item("TB001", "Hóa đơn tháng 05 đã được tạo", "Mới", "Hóa đơn", "Vui lòng thanh toán trước ngày 10")))
+        obj.put(AppScreen.RentRequests.name, JSONArray().put(itemWithDetails("YT001", "Lê Văn Nam muốn thuê P102", "Chờ duyệt", "6 tháng", "Muốn vào ngày 10/06/2026", listOf("tenantUsername" to "nguoithue", "roomId" to "P102"))))
+        obj.put(AppScreen.RenewRequests.name, JSONArray().put(itemWithDetails("GH001", "Gia hạn hợp đồng P101", "Chờ duyệt", "Thêm 6 tháng", "Người thuê muốn giữ phòng", listOf("tenantUsername" to "nguoithue", "contractId" to "HD001"))))
+        obj.put(AppScreen.Incidents.name, JSONArray()
+            .put(itemWithDetails("SC001", "Rò nước trong phòng P101", "Mới", "Rất gấp", "Người thuê vừa báo cáo, cần xử lý gấp.", listOf("tenantUsername" to "nguoithue", "roomId" to "P101")))
+            .put(itemWithDetails("SC002", "Điện phòng bị mất ở gắn điện", "Đang xử lý", "Gấp", "Bóng đèn bị cháy, cần thay mới.\n[Chủ trọ - 18/06/2026 09:00]: Đã sắp xếp thợ vào sửa ngày mai.", listOf("tenantUsername" to "nguoithue", "roomId" to "P101", "responseBy" to "Nguyễn Minh Quân"))))
+        obj.put(AppScreen.Notices.name, JSONArray()
+            .put(itemWithDetails("TB001", "Hóa đơn tháng 05 đã được tạo", "Mới", "Thông báo", "Vui lòng thanh toán trước ngày 10", listOf("targetUser" to "nguoithue", "createdBy" to "Chủ trọ")))
+            .put(itemWithDetails("TB002", "Thông báo nội quy nhà trọ", "Mới", "Thông báo", "Xin nhắc nhở quý khách không được nuôi vật nuôi trong nhà trọ. Tất cả khách ra vào phải quét mã QR ở cổng chính.", listOf("targetUser" to "", "targetType" to "all", "createdBy" to "Chủ trọ"))))
         obj.put(AppScreen.Users.name, JSONArray()
             .put(item("U001", "Admin hệ thống", "Admin", "admin@demo.local", "Quản lý toàn bộ hệ thống"))
             .put(item("U002", "Nguyễn Minh Quân", "Chủ trọ", "chutro@example.com", "Chủ trọ Nhà trọ An Bình"))
