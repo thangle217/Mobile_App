@@ -12,55 +12,55 @@ import com.example.myapplication.domain.model.UserRole
 import com.example.myapplication.domain.model.UserSession
 import org.json.JSONObject
 
-class RentalRepository(context: Context) {
+class RentalRepository(context: Context) : IRentalRepository {
     private val store = LocalAppStore(context.applicationContext)
 
-    suspend fun login(username: String, password: String, role: UserRole): Result<UserSession> = runCatching {
+    override suspend fun login(username: String, password: String, role: UserRole): Result<UserSession> = runCatching {
         store.login(username, password, role)
     }
 
-    suspend fun register(payload: JSONObject): Result<String> = runCatching {
+    override suspend fun register(payload: JSONObject): Result<String> = runCatching {
         store.register(payload)
     }
 
-    suspend fun forgotPassword(email: String): Result<String> = runCatching {
+    override suspend fun forgotPassword(email: String): Result<String> = runCatching {
         store.forgotPassword(email)
     }
 
-    suspend fun resetPassword(email: String, token: String, newPassword: String, confirmPassword: String): Result<String> = runCatching {
+    override suspend fun resetPassword(email: String, token: String, newPassword: String, confirmPassword: String): Result<String> = runCatching {
         store.resetPassword(email, token, newPassword, confirmPassword)
     }
 
-    suspend fun account(session: UserSession): UiState<AccountProfile> = runCatching {
+    override suspend fun account(session: UserSession): UiState<AccountProfile> = runCatching {
         store.account(session)
     }.fold(
         onSuccess = { UiState.Content(it, DataSource.Local) },
         onFailure = { UiState.Error(it.message ?: "Không tải được thông tin tài khoản.") }
     )
 
-    suspend fun updateAccount(session: UserSession, profile: AccountProfile): Result<AccountProfile> = runCatching {
+    override suspend fun updateAccount(session: UserSession, profile: AccountProfile): Result<AccountProfile> = runCatching {
         store.updateAccount(session, profile)
     }
 
-    suspend fun changePassword(session: UserSession, oldPassword: String, newPassword: String, confirmPassword: String): Result<String> = runCatching {
+    override suspend fun changePassword(session: UserSession, oldPassword: String, newPassword: String, confirmPassword: String): Result<String> = runCatching {
         store.changePassword(session, oldPassword, newPassword, confirmPassword)
     }
 
-    suspend fun uploadCccdImage(fileName: String, mimeType: String, bytes: ByteArray, session: UserSession? = null): Result<String> = runCatching {
+    override suspend fun uploadCccdImage(fileName: String, mimeType: String, bytes: ByteArray, session: UserSession?): Result<String> = runCatching {
         store.saveImage(fileName, mimeType, bytes)
     }
 
-    suspend fun dashboard(session: UserSession?): UiState<DashboardSummary> {
+    override suspend fun dashboard(session: UserSession?): UiState<DashboardSummary> {
         return UiState.Content(store.dashboard(), DataSource.Local)
     }
 
-    suspend fun list(screen: AppScreen, session: UserSession?): UiState<List<RentalItem>> {
+    override suspend fun list(screen: AppScreen, session: UserSession?): UiState<List<RentalItem>> {
         val items = store.list(screen, session)
         // Luôn trả về Content (kể cả khi rỗng) để ModuleScreen vẫn render và hiện nút "Thêm"
         return UiState.Content(items, DataSource.Local)
     }
 
-    suspend fun saveItem(screen: AppScreen, item: RentalItem, session: UserSession?): Result<RentalItem> = runCatching {
+    override suspend fun saveItem(screen: AppScreen, item: RentalItem, session: UserSession?): Result<RentalItem> = runCatching {
         require(canManage(session?.role, screen)) { "Tài khoản này không có quyền sửa ${screen.label.lowercase()}." }
         validateItemForScreen(screen, item)
         val id = item.id.ifBlank { store.nextId(screen) }
@@ -101,27 +101,27 @@ class RentalRepository(context: Context) {
         }
     }
 
-    suspend fun deleteItem(screen: AppScreen, id: String, session: UserSession?): Result<Unit> = runCatching {
+    override suspend fun deleteItem(screen: AppScreen, id: String, session: UserSession?): Result<Unit> = runCatching {
         require(canManage(session?.role, screen)) { "Tài khoản này không có quyền xóa ${screen.label.lowercase()}." }
         store.delete(screen, id)
     }
 
-    suspend fun requestRoom(roomId: String, session: UserSession?, duration: String, note: String): Result<RentalItem> = runCatching {
+    override suspend fun requestRoom(roomId: String, session: UserSession?, duration: String, note: String): Result<RentalItem> = runCatching {
         require(session?.role == UserRole.NguoiDung) { "Chỉ Người thuê được gửi yêu cầu thuê phòng." }
         store.createRentRequest(roomId, session!!, duration, note)
     }
 
-    suspend fun decideRentRequest(requestId: String, approve: Boolean, session: UserSession?): Result<RentalItem> = runCatching {
+    override suspend fun decideRentRequest(requestId: String, approve: Boolean, session: UserSession?): Result<RentalItem> = runCatching {
         require(session?.role == UserRole.Admin || session?.role == UserRole.ChuTro) { "Chỉ Admin hoặc Chủ trọ được duyệt yêu cầu thuê." }
         store.decideRentRequest(requestId, approve, session!!)
     }
 
-    suspend fun confirmContract(contractId: String, approve: Boolean, session: UserSession?): Result<RentalItem> = runCatching {
+    override suspend fun confirmContract(contractId: String, approve: Boolean, session: UserSession?): Result<RentalItem> = runCatching {
         require(session?.role == UserRole.NguoiDung) { "Chỉ Người thuê được xác nhận hợp đồng của mình." }
         store.confirmContract(contractId, approve, session!!)
     }
 
-    suspend fun saveContract(
+    override suspend fun saveContract(
         contractId: String,
         roomId: String,
         tenantUsername: String,
@@ -136,26 +136,26 @@ class RentalRepository(context: Context) {
         store.saveContract(contractId, roomId, tenantUsername, startDate, endDate, deposit, note, status, session!!)
     }
 
-    suspend fun closeContract(contractId: String, cancel: Boolean, session: UserSession?): Result<RentalItem> = runCatching {
+    override suspend fun closeContract(contractId: String, cancel: Boolean, session: UserSession?): Result<RentalItem> = runCatching {
         require(session?.role == UserRole.Admin || session?.role == UserRole.ChuTro) { "Chỉ Admin hoặc Chủ trọ được kết thúc/hủy hợp đồng." }
         store.closeContract(contractId, cancel, session!!)
     }
 
-    suspend fun createRenewRequest(contractId: String, session: UserSession?, newEndDate: String, note: String): Result<RentalItem> = runCatching {
+    override suspend fun createRenewRequest(contractId: String, session: UserSession?, newEndDate: String, note: String): Result<RentalItem> = runCatching {
         require(session?.role == UserRole.NguoiDung) { "Chỉ Người thuê được gửi yêu cầu gia hạn." }
         store.createRenewRequest(contractId, session!!, newEndDate, note)
     }
 
-    suspend fun decideRenewRequest(requestId: String, approve: Boolean, session: UserSession?): Result<RentalItem> = runCatching {
+    override suspend fun decideRenewRequest(requestId: String, approve: Boolean, session: UserSession?): Result<RentalItem> = runCatching {
         require(session?.role == UserRole.Admin || session?.role == UserRole.ChuTro) { "Chỉ Admin hoặc Chủ trọ được duyệt gia hạn." }
         store.decideRenewRequest(requestId, approve, session!!)
     }
 
-    suspend fun getLatestUtilityIndex(screen: AppScreen, roomId: String): Result<Double> = runCatching {
+    override suspend fun getLatestUtilityIndex(screen: AppScreen, roomId: String): Result<Double> = runCatching {
         store.getLatestUtilityIndex(screen, roomId)
     }
 
-    suspend fun saveUtilityReading(
+    override suspend fun saveUtilityReading(
         screen: AppScreen,
         roomId: String,
         period: String,
@@ -168,7 +168,7 @@ class RentalRepository(context: Context) {
         store.saveUtilityReading(screen, roomId, period, oldIndex, newIndex, price)
     }
 
-    suspend fun createInvoice(
+    override suspend fun createInvoice(
         roomId: String,
         period: String,
         otherCost: Double,
@@ -179,7 +179,7 @@ class RentalRepository(context: Context) {
         store.createInvoice(roomId, period, otherCost, otherNote)
     }
 
-    suspend fun submitPayment(
+    override suspend fun submitPayment(
         invoiceId: String,
         transactionId: String,
         receiptImage: String,
@@ -190,7 +190,7 @@ class RentalRepository(context: Context) {
         store.submitPayment(invoiceId, transactionId, receiptImage, note, session!!)
     }
 
-    suspend fun decidePayment(
+    override suspend fun decidePayment(
         paymentId: String,
         approve: Boolean,
         rejectReason: String?,
@@ -200,8 +200,41 @@ class RentalRepository(context: Context) {
         store.decidePayment(paymentId, approve, rejectReason, session!!)
     }
 
+    override suspend fun respondToIncident(
+        incidentId: String,
+        response: String,
+        newStatus: String,
+        session: UserSession?
+    ): Result<RentalItem> = runCatching {
+        require(session?.role == UserRole.Admin || session?.role == UserRole.ChuTro) {
+            "Chỉ Admin hoặc Chủ trọ có quyền phản hồi sự cố."
+        }
+        store.respondToIncident(incidentId, response, newStatus, session!!)
+    }
 
-    fun demoSession(roleName: String): UserSession {
+    override suspend fun markNoticeAsRead(noticeId: String, session: UserSession?): Result<RentalItem> = runCatching {
+        val username = session?.username ?: error("Vui lòng đăng nhập.")
+        store.markNoticeAsRead(noticeId, username)
+    }
+
+    override suspend fun createNotice(
+        title: String,
+        content: String,
+        targetType: String,
+        session: UserSession?
+    ): Result<RentalItem> = runCatching {
+        require(session?.role == UserRole.Admin || session?.role == UserRole.ChuTro) {
+            "Chỉ Admin hoặc Chủ trọ có quyền tạo thông báo."
+        }
+        store.createNotice(title, content, targetType, session!!)
+    }
+
+    override fun unreadNoticeCount(session: UserSession?): Int {
+        val username = session?.username ?: return 0
+        return store.unreadNoticeCount(username)
+    }
+
+    override fun demoSession(roleName: String): UserSession {
         val role = UserRole.from(roleName)
         val username = when (role) {
             UserRole.Admin -> "Admin"
