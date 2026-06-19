@@ -6,50 +6,14 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
-import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.Button
-import androidx.compose.material3.ButtonDefaults
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
-import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.DrawerValue
-import androidx.compose.material3.FilterChip
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.ModalDrawerSheet
-import androidx.compose.material3.ModalNavigationDrawer
-import androidx.compose.material3.NavigationBar
-import androidx.compose.material3.NavigationBarItem
-import androidx.compose.material3.NavigationDrawerItem
-import androidx.compose.material3.OutlinedButton
-import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.Scaffold
-import androidx.compose.material3.Surface
-import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
-import androidx.compose.material3.rememberDrawerState
-import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
-import androidx.compose.runtime.setValue
+import androidx.compose.material3.*
+import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -57,23 +21,18 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.example.myapplication.data.local.SessionStore
 import com.example.myapplication.data.repository.RentalRepository
 import com.example.myapplication.domain.model.AccountProfile
 import com.example.myapplication.domain.model.AppScreen
-import com.example.myapplication.domain.model.DashboardSummary
 import com.example.myapplication.domain.model.DataSource
 import com.example.myapplication.domain.model.RentalItem
 import com.example.myapplication.domain.model.UiState
 import com.example.myapplication.domain.model.UserRole
 import com.example.myapplication.domain.model.UserSession
-import com.example.myapplication.domain.util.formatCompactMoney
-import com.example.myapplication.domain.util.moneyValue
 import kotlinx.coroutines.launch
-import org.json.JSONObject
 
 @Composable
 fun RentalManagerApp() {
@@ -100,7 +59,9 @@ fun RentalManagerApp() {
             onLoggedIn = {
                 session = it
                 screen = AppScreen.Dashboard
-                if (it.token.isNotBlank()) scope.launch { sessionStore.save(it) }
+                if (it.token.isNotBlank()) {
+                    scope.launch { sessionStore.save(it) }
+                }
             }
         )
     } else {
@@ -119,221 +80,7 @@ fun RentalManagerApp() {
 }
 
 @Composable
-private fun LoginScreen(repository: RentalRepository, onLoggedIn: (UserSession) -> Unit) {
-    val scope = rememberCoroutineScope()
-    val context = LocalContext.current
-    var mode by remember { mutableStateOf(AuthMode.Login) }
-    var role by remember { mutableStateOf(UserRole.ChuTro) }
-    var username by remember { mutableStateOf("chutro") }
-    var fullName by remember { mutableStateOf("") }
-    var email by remember { mutableStateOf("") }
-    var phone by remember { mutableStateOf("") }
-    var cccd by remember { mutableStateOf("") }
-    var cccdFrontUrl by remember { mutableStateOf("") }
-    var cccdBackUrl by remember { mutableStateOf("") }
-    var otp by remember { mutableStateOf("") }
-    var password by remember { mutableStateOf("123456") }
-    var confirmPassword by remember { mutableStateOf("") }
-    var loading by remember { mutableStateOf(false) }
-    var error by remember { mutableStateOf<String?>(null) }
-    var message by remember { mutableStateOf<String?>(null) }
-
-    fun uploadFromUri(uri: Uri, onDone: (String) -> Unit) {
-        loading = true
-        error = null
-        scope.launch {
-            val result = runCatching {
-                val mime = context.contentResolver.getType(uri) ?: "image/jpeg"
-                val bytes = context.contentResolver.openInputStream(uri)?.use { it.readBytes() } ?: error("Không đọc được ảnh.")
-                val name = "cccd_${System.currentTimeMillis()}.jpg"
-                repository.uploadCccdImage(name, mime, bytes).getOrThrow()
-            }
-            result.onSuccess {
-                onDone(it)
-                message = "Upload ảnh CCCD thành công."
-            }.onFailure {
-                error = it.message ?: "Upload ảnh thất bại."
-            }
-            loading = false
-        }
-    }
-
-    val frontPicker = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri ->
-        uri?.let { uploadFromUri(it) { url -> cccdFrontUrl = url } }
-    }
-    val backPicker = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri ->
-        uri?.let { uploadFromUri(it) { url -> cccdBackUrl = url } }
-    }
-
-    fun selectRole(next: UserRole) {
-        role = next
-        username = when (next) {
-            UserRole.Admin -> "Admin"
-            UserRole.ChuTro -> "chutro"
-            UserRole.NguoiDung -> "nguoithue"
-        }
-        password = if (next == UserRole.Admin) "Admin123" else "123456"
-    }
-
-    Box(
-        modifier = Modifier
-            .fillMaxSize()
-            .background(Brush.linearGradient(listOf(Color(0xFF0D9488), Color(0xFF0891B2), Color(0xFF065F46))))
-            .padding(20.dp),
-        contentAlignment = Alignment.Center
-    ) {
-        Card(
-            modifier = Modifier.fillMaxWidth(),
-            shape = RoundedCornerShape(8.dp),
-            colors = CardDefaults.cardColors(containerColor = Color.White.copy(alpha = 0.98f)),
-            elevation = CardDefaults.cardElevation(defaultElevation = 8.dp)
-        ) {
-            Column(modifier = Modifier.padding(22.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
-                AppLogo(size = 54)
-                Text(authTitle(mode), style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold, color = Color(0xFF134E4A))
-                Text(authSubtitle(mode), color = Color(0xFF64748B))
-                LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    items(listOf(AuthMode.Login, AuthMode.Register, AuthMode.Forgot, AuthMode.Reset)) { item ->
-                        FilterChip(selected = mode == item, onClick = { mode = item; error = null; message = null }, label = { Text(item.label) })
-                    }
-                }
-                if (mode == AuthMode.Login || mode == AuthMode.Register) {
-                    LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        items(if (mode == AuthMode.Register) listOf(UserRole.ChuTro, UserRole.NguoiDung) else UserRole.entries) { item ->
-                            FilterChip(selected = role == item, onClick = { selectRole(item) }, label = { Text(item.label) })
-                        }
-                    }
-                }
-                if (mode == AuthMode.Login || mode == AuthMode.Register) {
-                    OutlinedTextField(username, { username = it }, label = { Text("Tên đăng nhập hoặc email") }, modifier = Modifier.fillMaxWidth(), singleLine = true, shape = RoundedCornerShape(8.dp))
-                }
-                if (mode == AuthMode.Register) {
-                    OutlinedTextField(fullName, { fullName = it }, label = { Text("Họ tên") }, modifier = Modifier.fillMaxWidth(), singleLine = true, shape = RoundedCornerShape(8.dp))
-                    OutlinedTextField(email, { email = it }, label = { Text("Email") }, modifier = Modifier.fillMaxWidth(), singleLine = true, shape = RoundedCornerShape(8.dp))
-                    OutlinedTextField(phone, { phone = it }, label = { Text("Số điện thoại") }, modifier = Modifier.fillMaxWidth(), singleLine = true, shape = RoundedCornerShape(8.dp))
-                    if (role == UserRole.NguoiDung) {
-                        OutlinedTextField(cccd, { cccd = it }, label = { Text("CCCD/CMND") }, modifier = Modifier.fillMaxWidth(), singleLine = true, shape = RoundedCornerShape(8.dp))
-                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
-                            OutlinedButton(onClick = { frontPicker.launch("image/*") }, modifier = Modifier.weight(1f), shape = RoundedCornerShape(8.dp)) { Text(if (cccdFrontUrl.isBlank()) "Ảnh mặt trước" else "Đã có mặt trước") }
-                            OutlinedButton(onClick = { backPicker.launch("image/*") }, modifier = Modifier.weight(1f), shape = RoundedCornerShape(8.dp)) { Text(if (cccdBackUrl.isBlank()) "Ảnh mặt sau" else "Đã có mặt sau") }
-                        }
-                    }
-                }
-                if (mode == AuthMode.Forgot || mode == AuthMode.Reset) {
-                    OutlinedTextField(email, { email = it }, label = { Text("Email nhận OTP") }, modifier = Modifier.fillMaxWidth(), singleLine = true, shape = RoundedCornerShape(8.dp))
-                }
-                if (mode == AuthMode.Reset) {
-                    OutlinedTextField(otp, { otp = it }, label = { Text("Mã OTP/Token") }, modifier = Modifier.fillMaxWidth(), singleLine = true, shape = RoundedCornerShape(8.dp))
-                }
-                if (mode != AuthMode.Forgot) {
-                    OutlinedTextField(
-                        value = password,
-                        onValueChange = { password = it },
-                        label = { Text(if (mode == AuthMode.Reset) "Mật khẩu mới" else "Mật khẩu") },
-                        visualTransformation = PasswordVisualTransformation(),
-                        modifier = Modifier.fillMaxWidth(),
-                        singleLine = true,
-                        shape = RoundedCornerShape(8.dp)
-                    )
-                }
-                if (mode == AuthMode.Register || mode == AuthMode.Reset) {
-                    OutlinedTextField(
-                        value = confirmPassword,
-                        onValueChange = { confirmPassword = it },
-                        label = { Text("Nhập lại mật khẩu") },
-                        visualTransformation = PasswordVisualTransformation(),
-                        modifier = Modifier.fillMaxWidth(),
-                        singleLine = true,
-                        shape = RoundedCornerShape(8.dp)
-                    )
-                }
-                error?.let { Text(it, color = Color(0xFFDC2626), style = MaterialTheme.typography.bodySmall) }
-                message?.let { Text(it, color = Color(0xFF047857), style = MaterialTheme.typography.bodySmall) }
-                Button(
-                    enabled = !loading,
-                    onClick = {
-                        loading = true
-                        error = null
-                        message = null
-                        scope.launch {
-                            when (mode) {
-                                AuthMode.Login -> repository.login(username, password, role)
-                                    .onSuccess(onLoggedIn)
-                                    .onFailure { error = it.message ?: "Không thể đăng nhập." }
-                                AuthMode.Register -> repository.register(
-                                    JSONObject()
-                                        .put("tenDangNhap", username)
-                                        .put("matKhau", password)
-                                        .put("xacNhanMatKhau", confirmPassword)
-                                        .put("email", email)
-                                        .put("hoTen", fullName)
-                                        .put("soDienThoai", phone)
-                                        .put("cccd", cccd)
-                                        .put("anhCccdMatTruoc", cccdFrontUrl)
-                                        .put("anhCccdMatSau", cccdBackUrl)
-                                        .put("vaiTro", role.name)
-                                ).onSuccess {
-                                    message = it
-                                    mode = AuthMode.Login
-                                }.onFailure { error = it.message ?: "Không thể đăng ký." }
-                                AuthMode.Forgot -> repository.forgotPassword(email)
-                                    .onSuccess { message = it; mode = AuthMode.Reset }
-                                    .onFailure { error = it.message ?: "Không thể gửi OTP." }
-                                AuthMode.Reset -> repository.resetPassword(email, otp, password, confirmPassword)
-                                    .onSuccess { message = it; mode = AuthMode.Login }
-                                    .onFailure { error = it.message ?: "Không thể đặt lại mật khẩu." }
-                            }
-                            loading = false
-                        }
-                    },
-                    modifier = Modifier.fillMaxWidth().height(52.dp),
-                    shape = RoundedCornerShape(8.dp),
-                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF0F766E))
-                ) {
-                    Text(if (loading) "Đang xử lý..." else mode.action)
-                }
-                if (mode == AuthMode.Login) {
-                    OutlinedButton(
-                        enabled = !loading,
-                        onClick = {
-                            error = null
-                            message = "Đang dùng tài khoản mẫu trong app để kiểm thử."
-                            onLoggedIn(repository.demoSession(role.name))
-                        },
-                        modifier = Modifier.fillMaxWidth(),
-                        shape = RoundedCornerShape(8.dp)
-                    ) {
-                        Text("Dùng tài khoản mẫu")
-                    }
-                }
-            }
-        }
-    }
-}
-
-private enum class AuthMode(val label: String, val action: String) {
-    Login("Đăng nhập", "Đăng nhập"),
-    Register("Đăng ký", "Tạo tài khoản"),
-    Forgot("Quên mật khẩu", "Gửi OTP"),
-    Reset("Đặt lại", "Đặt lại mật khẩu")
-}
-
-private fun authTitle(mode: AuthMode): String = when (mode) {
-    AuthMode.Login -> "Đăng nhập"
-    AuthMode.Register -> "Đăng ký tài khoản"
-    AuthMode.Forgot -> "Quên mật khẩu"
-    AuthMode.Reset -> "Đặt lại mật khẩu"
-}
-
-private fun authSubtitle(mode: AuthMode): String = when (mode) {
-    AuthMode.Login -> "Đăng nhập bằng tài khoản đã lưu trong app hoặc tài khoản mẫu."
-    AuthMode.Register -> "Tạo tài khoản Chủ trọ hoặc Người thuê và dùng ngay trong app."
-    AuthMode.Forgot -> "Nhập email để lấy mã đặt lại mật khẩu trong bản local."
-    AuthMode.Reset -> "Nhập mã 123456 hoặc mã đã được cấp và mật khẩu mới."
-}
-
-@Composable
-private fun MainShell(
+internal fun MainShell(
     repository: RentalRepository,
     session: UserSession?,
     screen: AppScreen,
@@ -349,25 +96,41 @@ private fun MainShell(
         drawerState = drawerState,
         drawerContent = {
             ModalDrawerSheet {
-                Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        AppLogo(size = 42)
-                        Spacer(Modifier.width(10.dp))
+                Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                    Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(vertical = 8.dp)) {
+                        AppLogo(size = 40)
+                        Spacer(Modifier.width(12.dp))
                         Column {
-                            Text(session?.displayName ?: role.label, fontWeight = FontWeight.Bold, color = Color(0xFF134E4A))
+                            Text(session?.displayName ?: role.label, fontWeight = FontWeight.Bold, color = Color(0xFF1E293B), style = MaterialTheme.typography.bodyLarge)
                             Text(role.label, color = Color(0xFF64748B), style = MaterialTheme.typography.bodySmall)
                         }
                     }
-                    screens.forEach { item ->
-                        NavigationDrawerItem(
-                            label = { Text(item.label) },
-                            selected = item == screen,
-                            onClick = {
-                                onScreenChange(item)
-                                scope.launch { drawerState.close() }
-                            },
-                            badge = { Text(item.shortCode) }
-                        )
+                    Divider(color = Color(0xFFE2E8F0))
+                    LazyColumn(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                        items(screens) { item ->
+                            NavigationDrawerItem(
+                                label = { Text(item.label, fontWeight = FontWeight.Medium) },
+                                selected = item == screen,
+                                onClick = {
+                                    onScreenChange(item)
+                                    scope.launch { drawerState.close() }
+                                },
+                                badge = {
+                                    Surface(
+                                        color = screenAccent(item).copy(alpha = 0.12f),
+                                        shape = RoundedCornerShape(6.dp)
+                                    ) {
+                                        Text(
+                                            text = item.shortCode,
+                                            color = screenAccent(item),
+                                            style = MaterialTheme.typography.labelSmall,
+                                            fontWeight = FontWeight.Bold,
+                                            modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                                        )
+                                    }
+                                }
+                            )
+                        }
                     }
                 }
             }
@@ -377,7 +140,7 @@ private fun MainShell(
             topBar = {
                 AppHeader(
                     title = screen.label,
-                    sourceLabel = "Dữ liệu trong app",
+                    sourceLabel = "Dữ liệu thiết bị",
                     onMenu = { scope.launch { drawerState.open() } },
                     onLogout = onLogout
                 )
@@ -402,46 +165,12 @@ private fun MainShell(
 }
 
 @Composable
-private fun DashboardScreen(repository: RentalRepository, session: UserSession?, onOpen: (AppScreen) -> Unit, onSessionExpired: () -> Unit) {
-    var state by remember { mutableStateOf<UiState<DashboardSummary>>(UiState.Loading) }
-
-    fun load() {
-        state = UiState.Loading
-    }
-
-    LaunchedEffect(session, state) {
-        if (state is UiState.Loading) state = repository.dashboard(session)
-    }
-
-    StateContainer(state = state, onRetry = { load() }, onSessionExpired = onSessionExpired) { summary, source ->
-        LazyColumn(
-            modifier = Modifier
-                .fillMaxSize()
-                .background(Brush.verticalGradient(listOf(Color(0xFFF0FDFA), Color(0xFFF8FAFC))))
-                .padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(14.dp)
-        ) {
-            item { HeroCard(session, summary, source) }
-            item {
-                Row(horizontalArrangement = Arrangement.spacedBy(12.dp), modifier = Modifier.fillMaxWidth()) {
-                    StatCard("Phòng", summary.totalRooms.toString(), "${summary.emptyRooms} còn trống", Color(0xFF0D9488), Modifier.weight(1f))
-                    StatCard("Hóa đơn", summary.unpaidInvoices.toString(), "Cần thu/xử lý", Color(0xFFF59E0B), Modifier.weight(1f))
-                }
-            }
-            item {
-                Row(horizontalArrangement = Arrangement.spacedBy(12.dp), modifier = Modifier.fillMaxWidth()) {
-                    StatCard("Cần xử lý", summary.pendingTasks.toString(), "Yêu cầu và biên lai", Color(0xFF0891B2), Modifier.weight(1f))
-                    StatCard("Đã thu", formatCompactMoney(summary.revenue), "Theo dữ liệu hiện tại", Color(0xFF10B981), Modifier.weight(1f))
-                }
-            }
-            item { SectionTitle("Tác vụ nhanh") }
-            item { QuickActions(session?.role ?: UserRole.ChuTro, onOpen) }
-        }
-    }
-}
-
-@Composable
-private fun ModuleScreen(repository: RentalRepository, session: UserSession?, screen: AppScreen, onSessionExpired: () -> Unit) {
+internal fun ModuleScreen(
+    repository: RentalRepository,
+    session: UserSession?,
+    screen: AppScreen,
+    onSessionExpired: () -> Unit
+) {
     val scope = rememberCoroutineScope()
     var state by remember(screen, session) { mutableStateOf<UiState<List<RentalItem>>>(UiState.Loading) }
     var query by remember(screen) { mutableStateOf("") }
@@ -458,6 +187,8 @@ private fun ModuleScreen(repository: RentalRepository, session: UserSession?, sc
     var invoices by remember(screen) { mutableStateOf<List<RentalItem>>(emptyList()) }
     var paymentForInvoice by remember { mutableStateOf<RentalItem?>(null) }
     var rejectingPayment by remember { mutableStateOf<RentalItem?>(null) }
+    var respondingIncident by remember { mutableStateOf<RentalItem?>(null) }
+    var noticeFormOpen by remember { mutableStateOf(false) }
     val role = session?.role ?: UserRole.NguoiDung
     val canManage = canManageScreen(role, screen)
 
@@ -466,16 +197,17 @@ private fun ModuleScreen(repository: RentalRepository, session: UserSession?, sc
     }
 
     LaunchedEffect(screen, session, state) {
-        if (state is UiState.Loading) state = repository.list(screen, session)
+        if (state is UiState.Loading) {
+            state = repository.list(screen, session)
+        }
     }
 
-    // Tải danh sách bổ trợ khi cần (dùng cho form chuyên biệt)
     LaunchedEffect(screen) {
         if (screen == AppScreen.Rooms) {
             val result = repository.list(AppScreen.Houses, null)
             if (result is UiState.Content) houses = result.data
         }
-        if (screen in setOf(AppScreen.Electric, AppScreen.Water, AppScreen.Invoices, AppScreen.Payments)) {
+        if (screen in setOf(AppScreen.Electric, AppScreen.Water, AppScreen.Invoices, AppScreen.Payments, AppScreen.Notices)) {
             val result = repository.list(AppScreen.Rooms, null)
             if (result is UiState.Content) rooms = result.data
         }
@@ -484,7 +216,6 @@ private fun ModuleScreen(repository: RentalRepository, session: UserSession?, sc
             if (result is UiState.Content) invoices = result.data
         }
     }
-
 
     StateContainer(state = state, onRetry = { load() }, onSessionExpired = onSessionExpired) { items, source ->
         val statuses = listOf("Tất cả") + items.map { it.status }.distinct()
@@ -496,9 +227,9 @@ private fun ModuleScreen(repository: RentalRepository, session: UserSession?, sc
         LazyColumn(
             modifier = Modifier
                 .fillMaxSize()
-                .background(Brush.verticalGradient(listOf(Color(0xFFF0FDFA), Color(0xFFF8FAFC))))
+                .background(Brush.verticalGradient(listOf(Color(0xFFF8FAFC), Color(0xFFF1F5F9))))
                 .padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp)
+            verticalArrangement = Arrangement.spacedBy(14.dp)
         ) {
             item { ModuleHeader(screen, items.size, source) }
             if (canManage) item {
@@ -507,6 +238,8 @@ private fun ModuleScreen(repository: RentalRepository, session: UserSession?, sc
                         actionError = null
                         if (screen == AppScreen.Contracts) {
                             contractEditing = RentalItem("", "", "Chờ người thuê xác nhận", "", "")
+                        } else if (screen == AppScreen.Notices) {
+                            noticeFormOpen = true
                         } else {
                             editing = RentalItem(
                                 id = "",
@@ -518,15 +251,15 @@ private fun ModuleScreen(repository: RentalRepository, session: UserSession?, sc
                         }
                     },
                     modifier = Modifier.fillMaxWidth().height(48.dp),
-                    shape = RoundedCornerShape(8.dp),
+                    shape = RoundedCornerShape(12.dp),
                     colors = ButtonDefaults.buttonColors(containerColor = screenAccent(screen)),
-                    elevation = ButtonDefaults.buttonElevation(defaultElevation = 4.dp, pressedElevation = 0.dp)
+                    elevation = ButtonDefaults.buttonElevation(defaultElevation = 2.dp)
                 ) {
-                    Text("Thêm ${screen.label.lowercase()}", color = Color.White, fontWeight = FontWeight.Bold)
+                    Text("Thêm ${screen.label.lowercase()}", color = Color.White, fontWeight = FontWeight.Bold, style = MaterialTheme.typography.bodyMedium)
                 }
             }
             actionError?.let {
-                item { Text(it, color = Color(0xFFDC2626), style = MaterialTheme.typography.bodySmall) }
+                item { Text(it, color = Color(0xFFEF4444), style = MaterialTheme.typography.bodySmall) }
             }
             if (items.isNotEmpty()) {
                 item {
@@ -536,7 +269,7 @@ private fun ModuleScreen(repository: RentalRepository, session: UserSession?, sc
             if (items.isEmpty()) {
                 item {
                     EmptyState(
-                        if (canManage) "Chưa có dữ liệu. Bấm \"Thêm\" để tạo mới."
+                        if (canManage) "Chưa có dữ liệu. Hãy bấm nút Thêm phía trên để tạo mới."
                         else "Chưa có dữ liệu ${screen.label.lowercase()}."
                     )
                 }
@@ -602,7 +335,7 @@ private fun ModuleScreen(repository: RentalRepository, session: UserSession?, sc
                             onConfirmContract = {
                                 confirmData = ConfirmData(
                                     title = "Xác nhận hợp đồng",
-                                    message = "Bạn có chắc chắn muốn xác nhận hợp đồng này? Phòng sẽ được chuyển sang trạng thái Đã thuê.",
+                                    message = "Bạn có chắc chắn muốn ký xác nhận hợp đồng này không?",
                                     onConfirm = {
                                         scope.launch {
                                             repository.confirmContract(item.id, approve = true, session = session)
@@ -615,7 +348,7 @@ private fun ModuleScreen(repository: RentalRepository, session: UserSession?, sc
                             onRejectContract = {
                                 confirmData = ConfirmData(
                                     title = "Từ chối hợp đồng",
-                                    message = "Bạn có chắc chắn muốn từ chối hợp đồng này?",
+                                    message = "Bạn có từ chối ký hợp đồng này không?",
                                     onConfirm = {
                                         scope.launch {
                                             repository.confirmContract(item.id, approve = false, session = session)
@@ -628,7 +361,7 @@ private fun ModuleScreen(repository: RentalRepository, session: UserSession?, sc
                             onCloseContract = {
                                 confirmData = ConfirmData(
                                     title = "Kết thúc hợp đồng",
-                                    message = "Bạn có chắc chắn muốn kết thúc hợp đồng này? Phòng sẽ được mở lại trạng thái Còn trống.",
+                                    message = "Bạn có chắc muốn kết thúc hợp đồng này sớm?",
                                     onConfirm = {
                                         scope.launch {
                                             repository.closeContract(item.id, cancel = false, session = session)
@@ -641,7 +374,7 @@ private fun ModuleScreen(repository: RentalRepository, session: UserSession?, sc
                             onCancelContract = {
                                 confirmData = ConfirmData(
                                     title = "Hủy hợp đồng",
-                                    message = "Bạn có chắc chắn muốn hủy hợp đồng này? Phòng sẽ được mở lại trạng thái Còn trống.",
+                                    message = "Bạn có chắc chắn muốn hủy bỏ hợp đồng này?",
                                     onConfirm = {
                                         scope.launch {
                                             repository.closeContract(item.id, cancel = true, session = session)
@@ -655,7 +388,7 @@ private fun ModuleScreen(repository: RentalRepository, session: UserSession?, sc
                             onApproveRenew = {
                                 confirmData = ConfirmData(
                                     title = "Duyệt gia hạn",
-                                    message = "Bạn có chắc chắn muốn duyệt gia hạn hợp đồng này?",
+                                    message = "Bạn đồng ý gia hạn hợp đồng này chứ?",
                                     onConfirm = {
                                         scope.launch {
                                             repository.decideRenewRequest(item.id, approve = true, session = session)
@@ -668,7 +401,7 @@ private fun ModuleScreen(repository: RentalRepository, session: UserSession?, sc
                             onRejectRenew = {
                                 confirmData = ConfirmData(
                                     title = "Từ chối gia hạn",
-                                    message = "Bạn có chắc chắn muốn từ chối gia hạn hợp đồng này?",
+                                    message = "Bạn không đồng ý gia hạn hợp đồng này?",
                                     onConfirm = {
                                         scope.launch {
                                             repository.decideRenewRequest(item.id, approve = false, session = session)
@@ -681,8 +414,8 @@ private fun ModuleScreen(repository: RentalRepository, session: UserSession?, sc
                             onPayInvoice = { paymentForInvoice = item },
                             onApprovePayment = {
                                 confirmData = ConfirmData(
-                                    title = "Duyệt thanh toán",
-                                    message = "Bạn có chắc chắn muốn xác nhận biên lai này? Hóa đơn liên kết sẽ được đánh dấu Đã thanh toán.",
+                                    title = "Xác nhận thanh toán",
+                                    message = "Bạn đã nhận được tiền và muốn duyệt thanh toán này chứ?",
                                     onConfirm = {
                                         scope.launch {
                                             repository.decidePayment(item.id, approve = true, rejectReason = null, session = session)
@@ -692,8 +425,14 @@ private fun ModuleScreen(repository: RentalRepository, session: UserSession?, sc
                                     }
                                 )
                             },
-                            onRejectPayment = { rejectingPayment = item }
-
+                            onRejectPayment = { rejectingPayment = item },
+                            onRespondIncident = { respondingIncident = item },
+                            onMarkNoticeRead = {
+                                scope.launch {
+                                    repository.markNoticeAsRead(item.id, session)
+                                        .onSuccess { load() }
+                                }
+                            }
                         )
                     }
                 }
@@ -701,33 +440,28 @@ private fun ModuleScreen(repository: RentalRepository, session: UserSession?, sc
         }
     }
 
-    confirmData?.let { data ->
+    selected?.let { DetailDialog(it, screen, onDismiss = { selected = null }) }
+
+    confirmData?.let {
         AlertDialog(
             onDismissRequest = { confirmData = null },
-            title = { Text(data.title, fontWeight = FontWeight.Bold, color = Color(0xFF134E4A)) },
-            text = { Text(data.message) },
+            shape = RoundedCornerShape(16.dp),
+            title = { Text(it.title, fontWeight = FontWeight.Bold, color = Color(0xFF1E293B)) },
+            text = { Text(it.message, color = Color(0xFF475569)) },
             confirmButton = {
                 Button(
                     onClick = {
-                        data.onConfirm()
+                        it.onConfirm()
                         confirmData = null
                     },
-                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF0F766E)),
-                    shape = RoundedCornerShape(8.dp)
-                ) {
-                    Text("Đồng ý")
-                }
+                    shape = RoundedCornerShape(8.dp),
+                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF7C3AED))
+                ) { Text("Xác nhận", fontWeight = FontWeight.Bold) }
             },
             dismissButton = {
-                TextButton(onClick = { confirmData = null }) {
-                    Text("Hủy")
-                }
+                TextButton(onClick = { confirmData = null }) { Text("Hủy") }
             }
         )
-    }
-
-    selected?.let {
-        DetailDialog(item = it, screen = screen, onDismiss = { selected = null })
     }
 
     editing?.let { item ->
@@ -738,18 +472,18 @@ private fun ModuleScreen(repository: RentalRepository, session: UserSession?, sc
             rooms = rooms,
             invoices = invoices,
             onDismiss = { editing = null },
-            onSaveUtility = { s, rId, p, old, new, pr ->
+            onSaveUtility = { scr, rId, prd, oldVal, newVal, unitPr ->
                 actionError = null
                 scope.launch {
-                    repository.saveUtilityReading(s, rId, p, old, new, pr, session)
+                    repository.saveUtilityReading(scr, rId, prd, oldVal, newVal, unitPr, session)
                         .onSuccess { editing = null; load() }
                         .onFailure { actionError = it.message ?: "Không thể lưu chỉ số." }
                 }
             },
-            onSaveInvoice = { rId, p, other, note ->
+            onSaveInvoice = { rId, prd, extra, note ->
                 actionError = null
                 scope.launch {
-                    repository.createInvoice(rId, p, other, note, session)
+                    repository.createInvoice(rId, prd, extra, note, session)
                         .onSuccess { editing = null; load() }
                         .onFailure { actionError = it.message ?: "Không thể tạo hóa đơn." }
                 }
@@ -762,10 +496,10 @@ private fun ModuleScreen(repository: RentalRepository, session: UserSession?, sc
                         .onFailure { actionError = it.message ?: "Không thể gửi biên lai." }
                 }
             },
-            onSave = { next ->
+            onSave = { updated ->
                 actionError = null
                 scope.launch {
-                    repository.saveItem(screen, next, session)
+                    repository.saveItem(screen, updated, session)
                         .onSuccess { editing = null; load() }
                         .onFailure { actionError = it.message ?: "Không thể lưu dữ liệu." }
                 }
@@ -778,25 +512,40 @@ private fun ModuleScreen(repository: RentalRepository, session: UserSession?, sc
         ContractEditorDialog(
             item = item,
             onDismiss = { contractEditing = null },
-            onSave = { roomId, tenantUsername, startDate, endDate, deposit, note, status ->
+            onSave = { rId, tenant, start, end, dep, note, status ->
+                actionError = null
+                val updated = item.copy(
+                    title = "Hợp đồng phòng $rId",
+                    status = status,
+                    value = dep,
+                    note = note,
+                    details = listOf(
+                        "roomId" to rId,
+                        "tenantUsername" to tenant,
+                        "startDate" to start,
+                        "endDate" to end,
+                        "deposit" to dep
+                    )
+                )
+                scope.launch {
+                    repository.saveItem(AppScreen.Contracts, updated, session)
+                        .onSuccess { contractEditing = null; load() }
+                        .onFailure { actionError = it.message ?: "Không thể lưu hợp đồng." }
+                }
+            }
+        )
+    }
+
+    renewContract?.let { contract ->
+        RenewRequestDialog(
+            contract = contract,
+            onDismiss = { renewContract = null },
+            onSubmit = { newEnd, note ->
                 actionError = null
                 scope.launch {
-                    repository.saveContract(
-                        contractId = item.id,
-                        roomId = roomId,
-                        tenantUsername = tenantUsername,
-                        startDate = startDate,
-                        endDate = endDate,
-                        deposit = deposit,
-                        note = note,
-                        status = status,
-                        session = session
-                    ).onSuccess {
-                        contractEditing = null
-                        load()
-                    }.onFailure {
-                        actionError = it.message ?: "Không thể lưu hợp đồng."
-                    }
+                    repository.createRenewRequest(contract.id, session, newEnd, note)
+                        .onSuccess { renewContract = null; load() }
+                        .onFailure { actionError = it.message ?: "Không thể gửi yêu cầu gia hạn." }
                 }
             }
         )
@@ -810,29 +559,8 @@ private fun ModuleScreen(repository: RentalRepository, session: UserSession?, sc
                 actionError = null
                 scope.launch {
                     repository.requestRoom(room.id, session, duration, note)
-                        .onSuccess {
-                            rentRequestRoom = null
-                            load()
-                        }
+                        .onSuccess { rentRequestRoom = null; load() }
                         .onFailure { actionError = it.message ?: "Không thể gửi yêu cầu thuê phòng." }
-                }
-            }
-        )
-    }
-
-    renewContract?.let { contract ->
-        RenewRequestDialog(
-            contract = contract,
-            onDismiss = { renewContract = null },
-            onSubmit = { newEndDate, note ->
-                actionError = null
-                scope.launch {
-                    repository.createRenewRequest(contract.id, session, newEndDate, note)
-                        .onSuccess {
-                            renewContract = null
-                            load()
-                        }
-                        .onFailure { actionError = it.message ?: "Không thể gửi yêu cầu gia hạn." }
                 }
             }
         )
@@ -875,10 +603,43 @@ private fun ModuleScreen(repository: RentalRepository, session: UserSession?, sc
         )
     }
 
+    respondingIncident?.let { incident ->
+        RespondIncidentDialog(
+            incident = incident,
+            onDismiss = { respondingIncident = null },
+            onSubmit = { response, newStatus ->
+                actionError = null
+                scope.launch {
+                    repository.respondToIncident(incident.id, response, newStatus, session)
+                        .onSuccess { respondingIncident = null; load() }
+                        .onFailure { actionError = it.message ?: "Không thể phản hồi sự cố." }
+                }
+            }
+        )
+    }
+
+    if (noticeFormOpen && canManage) {
+        NoticeFormDialog(
+            rooms = rooms,
+            onDismiss = { noticeFormOpen = false },
+            onSave = { title, content, targetType ->
+                actionError = null
+                scope.launch {
+                    repository.createNotice(title, content, targetType, session)
+                        .onSuccess { noticeFormOpen = false; load() }
+                        .onFailure { actionError = it.message ?: "Không thể tạo thông báo." }
+                }
+            }
+        )
+    }
 }
 
 @Composable
-private fun AccountScreen(repository: RentalRepository, session: UserSession?, onSessionExpired: () -> Unit) {
+internal fun AccountScreen(
+    repository: RentalRepository,
+    session: UserSession?,
+    onSessionExpired: () -> Unit
+) {
     val scope = rememberCoroutineScope()
     val context = LocalContext.current
     var state by remember(session) { mutableStateOf<UiState<AccountProfile>>(UiState.Loading) }
@@ -900,14 +661,14 @@ private fun AccountScreen(repository: RentalRepository, session: UserSession?, o
         scope.launch {
             val result = runCatching {
                 val mime = context.contentResolver.getType(uri) ?: "image/jpeg"
-                val bytes = context.contentResolver.openInputStream(uri)?.use { it.readBytes() } ?: error("Không đọc được ảnh.")
+                val bytes = context.contentResolver.openInputStream(uri)?.use { it.readBytes() } ?: error("Không đọc được ảnh CCCD.")
                 repository.uploadCccdImage("cccd_${System.currentTimeMillis()}.jpg", mime, bytes, currentSession).getOrThrow()
             }
             result.onSuccess {
                 draft = if (front) draft.copy(cccdFrontUrl = it) else draft.copy(cccdBackUrl = it)
-                message = "Upload ảnh CCCD thành công. Bấm Lưu hồ sơ để cập nhật."
+                message = "Upload ảnh CCCD thành công. Hãy bấm Lưu hồ sơ để cập nhật."
             }.onFailure {
-                error = it.message ?: "Upload ảnh thất bại."
+                error = it.message ?: "Upload ảnh CCCD thất bại."
             }
             saving = false
         }
@@ -932,30 +693,39 @@ private fun AccountScreen(repository: RentalRepository, session: UserSession?, o
         LazyColumn(
             modifier = Modifier
                 .fillMaxSize()
-                .background(Brush.verticalGradient(listOf(Color(0xFFF0FDFA), Color(0xFFF8FAFC))))
+                .background(Brush.verticalGradient(listOf(Color(0xFFF8FAFC), Color(0xFFF1F5F9))))
                 .padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(14.dp)
+            verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
             item {
                 Card(
-                    shape = RoundedCornerShape(8.dp),
+                    shape = RoundedCornerShape(16.dp),
                     colors = CardDefaults.cardColors(containerColor = Color.White),
-                    border = BorderStroke(1.dp, Color(0xFFD1FAE5)),
+                    border = BorderStroke(1.dp, Color(0xFFF1F5F9)),
+                    elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
                     modifier = Modifier.fillMaxWidth()
                 ) {
-                    Column(modifier = Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                    Column(modifier = Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
                         Row(verticalAlignment = Alignment.CenterVertically) {
-                            AppLogo(size = 44)
-                            Spacer(Modifier.width(12.dp))
+                            AppLogo(size = 48)
+                            Spacer(Modifier.width(16.dp))
                             Column(modifier = Modifier.weight(1f)) {
-                                Text("Tài khoản của tôi", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold, color = Color(0xFF134E4A))
-                                Text(profile.role.label, color = Color(0xFF64748B))
+                                Text("Hồ sơ cá nhân", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold, color = Color(0xFF1E293B))
+                                Text(profile.role.label, color = Color(0xFF64748B), style = MaterialTheme.typography.bodyMedium)
                             }
                         }
-                        message?.let { Text(it, color = Color(0xFF047857)) }
-                        error?.let { Text(it, color = Color(0xFFDC2626)) }
+                        message?.let { Text(it, color = Color(0xFF10B981), style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.Medium) }
+                        error?.let { Text(it, color = Color(0xFFEF4444), style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.Medium) }
+                        
+                        Divider(color = Color(0xFFF1F5F9))
+
                         if (editing) {
-                            ProfileEditor(draft, onChange = { draft = it }, onPickFront = { frontPicker.launch("image/*") }, onPickBack = { backPicker.launch("image/*") })
+                            ProfileEditor(
+                                profile = draft,
+                                onChange = { draft = it },
+                                onPickFront = { frontPicker.launch("image/*") },
+                                onPickBack = { backPicker.launch("image/*") }
+                            )
                         } else {
                             listOf(
                                 "Họ tên" to profile.fullName,
@@ -968,7 +738,10 @@ private fun AccountScreen(repository: RentalRepository, session: UserSession?, o
                                 "Số tài khoản" to profile.bankAccount
                             ).forEach { DetailRow(it.first, it.second.ifBlank { "Chưa cập nhật" }) }
                         }
-                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
+                        
+                        Divider(color = Color(0xFFF1F5F9))
+
+                        Row(horizontalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.fillMaxWidth()) {
                             Button(
                                 enabled = !saving,
                                 onClick = {
@@ -992,16 +765,24 @@ private fun AccountScreen(repository: RentalRepository, session: UserSession?, o
                                         error = null
                                     }
                                 },
-                                shape = RoundedCornerShape(8.dp),
-                                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF0F766E)),
-                                modifier = Modifier.weight(1f)
-                            ) { Text(if (editing) "Lưu hồ sơ" else "Cập nhật") }
-                            OutlinedButton(onClick = { changingPassword = true }, shape = RoundedCornerShape(8.dp), modifier = Modifier.weight(1f)) {
-                                Text("Đổi mật khẩu")
+                                shape = RoundedCornerShape(10.dp),
+                                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF7C3AED)),
+                                modifier = Modifier.weight(1f).height(44.dp)
+                            ) { Text(if (editing) "Lưu hồ sơ" else "Cập nhật", fontWeight = FontWeight.Bold) }
+                            
+                            OutlinedButton(
+                                onClick = { changingPassword = true },
+                                shape = RoundedCornerShape(10.dp),
+                                modifier = Modifier.weight(1f).height(44.dp)
+                            ) {
+                                Text("Đổi mật khẩu", fontWeight = FontWeight.Bold)
                             }
                         }
                         if (editing) {
-                            TextButton(onClick = { editing = false; draft = profile }) { Text("Hủy chỉnh sửa") }
+                            TextButton(
+                                onClick = { editing = false; draft = profile },
+                                modifier = Modifier.fillMaxWidth()
+                            ) { Text("Hủy chỉnh sửa", color = Color(0xFF64748B), fontWeight = FontWeight.Medium) }
                         }
                     }
                 }
@@ -1031,70 +812,13 @@ private fun AccountScreen(repository: RentalRepository, session: UserSession?, o
 }
 
 @Composable
-private fun <T> StateContainer(
-    state: UiState<T>,
-    onRetry: () -> Unit,
-    onSessionExpired: (() -> Unit)? = null,
-    content: @Composable (T, DataSource) -> Unit
-) {
-    when (state) {
-        UiState.Loading -> FullScreenLoading("Đang tải dữ liệu...")
-        is UiState.Empty -> EmptyState(state.message)
-        is UiState.Error -> {
-            val action: () -> Unit = if (state.canRetry) onRetry else ({ onSessionExpired?.invoke() })
-            ErrorState(state.message, action, state.canRetry)
-        }
-        is UiState.Content -> content(state.data, state.source)
-    }
-}
-
-@Composable
-private fun FullScreenLoading(message: String) {
-    Box(modifier = Modifier.fillMaxSize().background(Color(0xFFF0FDFA)), contentAlignment = Alignment.Center) {
-        Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(12.dp)) {
-            CircularProgressIndicator(color = Color(0xFF0F766E))
-            Text(message, color = Color(0xFF134E4A))
-        }
-    }
-}
-
-@Composable
-private fun ErrorState(message: String, onRetry: () -> Unit, canRetry: Boolean = true) {
-    Box(modifier = Modifier.fillMaxSize().padding(20.dp), contentAlignment = Alignment.Center) {
-        Card(shape = RoundedCornerShape(8.dp), colors = CardDefaults.cardColors(containerColor = Color.White), border = BorderStroke(1.dp, Color(0xFFFECACA))) {
-            Column(modifier = Modifier.padding(18.dp), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                Text("Không tải được dữ liệu", fontWeight = FontWeight.Bold, color = Color(0xFF991B1B))
-                Text(message, color = Color(0xFF64748B))
-                Button(onClick = onRetry, shape = RoundedCornerShape(8.dp), colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF0F766E))) {
-                    Text(if (canRetry) "Thử lại" else "Đăng nhập lại")
-                }
-            }
-        }
-    }
-}
-
-@Composable
-private fun EmptyState(message: String) {
-    Box(modifier = Modifier.fillMaxSize().padding(20.dp), contentAlignment = Alignment.Center) {
-        Card(shape = RoundedCornerShape(8.dp), colors = CardDefaults.cardColors(containerColor = Color.White), border = BorderStroke(1.dp, Color(0xFFD1FAE5))) {
-            Column(modifier = Modifier.padding(22.dp), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                Surface(shape = CircleShape, color = Color(0xFFCCFBF1), modifier = Modifier.size(46.dp)) {
-                    Box(contentAlignment = Alignment.Center) { Text("0", color = Color(0xFF0F766E), fontWeight = FontWeight.Bold) }
-                }
-                Text(message, color = Color(0xFF64748B))
-            }
-        }
-    }
-}
-
-@Composable
-private fun ProfileEditor(
+internal fun ProfileEditor(
     profile: AccountProfile,
     onChange: (AccountProfile) -> Unit,
     onPickFront: () -> Unit,
     onPickBack: () -> Unit
 ) {
-    Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
         OutlinedTextField(profile.fullName, { onChange(profile.copy(fullName = it)) }, label = { Text("Họ tên") }, modifier = Modifier.fillMaxWidth(), singleLine = true, shape = RoundedCornerShape(8.dp))
         OutlinedTextField(profile.email, { onChange(profile.copy(email = it)) }, label = { Text("Email") }, modifier = Modifier.fillMaxWidth(), singleLine = true, shape = RoundedCornerShape(8.dp))
         OutlinedTextField(profile.phone, { onChange(profile.copy(phone = it)) }, label = { Text("Số điện thoại") }, modifier = Modifier.fillMaxWidth(), singleLine = true, shape = RoundedCornerShape(8.dp))
@@ -1123,290 +847,188 @@ private fun ProfileEditor(
 }
 
 @Composable
-private fun ChangePasswordDialog(
-    saving: Boolean,
-    onDismiss: () -> Unit,
-    onSubmit: (String, String, String) -> Unit
-) {
-    var oldPassword by remember { mutableStateOf("") }
-    var newPassword by remember { mutableStateOf("") }
-    var confirmPassword by remember { mutableStateOf("") }
-
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text("Đổi mật khẩu") },
-        text = {
-            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                OutlinedTextField(oldPassword, { oldPassword = it }, label = { Text("Mật khẩu cũ") }, visualTransformation = PasswordVisualTransformation(), modifier = Modifier.fillMaxWidth())
-                OutlinedTextField(newPassword, { newPassword = it }, label = { Text("Mật khẩu mới") }, visualTransformation = PasswordVisualTransformation(), modifier = Modifier.fillMaxWidth())
-                OutlinedTextField(confirmPassword, { confirmPassword = it }, label = { Text("Nhập lại mật khẩu mới") }, visualTransformation = PasswordVisualTransformation(), modifier = Modifier.fillMaxWidth())
-            }
-        },
-        confirmButton = {
-            Button(enabled = !saving, onClick = { onSubmit(oldPassword, newPassword, confirmPassword) }) {
-                Text(if (saving) "Đang lưu..." else "Đổi mật khẩu")
-            }
-        },
-        dismissButton = { TextButton(onClick = onDismiss) { Text("Hủy") } }
-    )
-}
-
-@Composable
-private fun AppHeader(title: String, sourceLabel: String, onMenu: () -> Unit, onLogout: () -> Unit) {
+internal fun ModuleHeader(screen: AppScreen, count: Int, source: DataSource) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .background(Brush.horizontalGradient(listOf(Color(0xFF0D9488), Color(0xFF0891B2), Color(0xFF065F46))))
-            .padding(horizontal = 14.dp, vertical = 12.dp),
+            .padding(vertical = 8.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        TextButton(onClick = onMenu) { Text("Menu", color = Color.White) }
-        Column(modifier = Modifier.weight(1f)) {
-            Text(title, color = Color.White, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis)
-            Text(sourceLabel, color = Color(0xFFCCFBF1), style = MaterialTheme.typography.labelMedium)
+        val accent = screenAccent(screen)
+        Surface(
+            shape = RoundedCornerShape(12.dp),
+            color = accent.copy(alpha = 0.12f),
+            modifier = Modifier.size(48.dp)
+        ) {
+            Box(contentAlignment = Alignment.Center) {
+                Text(
+                    text = screen.shortCode,
+                    color = accent,
+                    fontWeight = FontWeight.ExtraBold,
+                    style = MaterialTheme.typography.titleMedium
+                )
+            }
         }
-        TextButton(onClick = onLogout) { Text("Thoát", color = Color.White) }
+        Spacer(Modifier.width(16.dp))
+        Column(modifier = Modifier.weight(1f)) {
+            Text(
+                text = screen.label,
+                style = MaterialTheme.typography.titleLarge,
+                fontWeight = FontWeight.ExtraBold,
+                color = Color(0xFF1E293B)
+            )
+            Text(
+                text = "$count bản ghi • ${sourceLabel(source)}",
+                color = Color(0xFF64748B),
+                style = MaterialTheme.typography.bodyMedium
+            )
+        }
     }
 }
 
 @Composable
-private fun AppBottomBar(items: List<AppScreen>, selected: AppScreen, onSelected: (AppScreen) -> Unit) {
-    Surface(
-        color = Color.White,
-        shadowElevation = 10.dp,
-        tonalElevation = 4.dp,
-        border = BorderStroke(1.dp, Color(0xFFE0F2F1))
+internal fun SearchPanel(
+    query: String,
+    onQueryChange: (String) -> Unit,
+    statuses: List<String>,
+    status: String,
+    onStatusChange: (String) -> Unit
+) {
+    Card(
+        shape = RoundedCornerShape(16.dp),
+        colors = CardDefaults.cardColors(containerColor = Color.White),
+        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
+        border = BorderStroke(1.dp, Color(0xFFF1F5F9))
     ) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 8.dp, vertical = 8.dp),
-            horizontalArrangement = Arrangement.spacedBy(6.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            items.forEach { item ->
-                val active = selected == item
-                val accent = screenAccent(item)
+        Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            OutlinedTextField(
+                value = query,
+                onValueChange = onQueryChange,
+                label = { Text("Tìm kiếm theo từ khóa...") },
+                modifier = Modifier.fillMaxWidth(),
+                singleLine = true,
+                shape = RoundedCornerShape(12.dp)
+            )
+            LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                items(statuses) { item ->
+                    FilterChip(
+                        selected = status == item,
+                        onClick = { onStatusChange(item) },
+                        label = { Text(item) },
+                        shape = RoundedCornerShape(8.dp)
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+internal fun RentalListCard(
+    item: RentalItem,
+    canManage: Boolean,
+    onOpen: () -> Unit,
+    onEdit: () -> Unit,
+    onDelete: () -> Unit
+) {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(16.dp),
+        colors = CardDefaults.cardColors(containerColor = Color.White),
+        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
+        border = BorderStroke(1.dp, Color(0xFFF1F5F9))
+    ) {
+        Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Box(
+                    Modifier
+                        .size(width = 4.dp, height = 48.dp)
+                        .clip(RoundedCornerShape(8.dp))
+                        .background(statusColor(item.status))
+                )
+                Spacer(Modifier.width(12.dp))
                 Surface(
-                    onClick = { onSelected(item) },
-                    modifier = Modifier.weight(1f),
-                    shape = RoundedCornerShape(8.dp),
-                    color = if (active) accent.copy(alpha = 0.16f) else Color(0xFFF8FAFC),
-                    border = BorderStroke(1.dp, if (active) accent.copy(alpha = 0.5f) else Color(0xFFE2E8F0)),
-                    shadowElevation = if (active) 4.dp else 1.dp
+                    shape = RoundedCornerShape(12.dp),
+                    color = statusColor(item.status).copy(alpha = 0.1f),
+                    modifier = Modifier.size(44.dp)
                 ) {
-                    Column(
-                        modifier = Modifier.padding(horizontal = 6.dp, vertical = 7.dp),
-                        horizontalAlignment = Alignment.CenterHorizontally,
-                        verticalArrangement = Arrangement.spacedBy(4.dp)
-                    ) {
-                        Surface(
-                            shape = RoundedCornerShape(8.dp),
-                            color = if (active) accent else accent.copy(alpha = 0.12f)
-                        ) {
-                            Text(
-                                item.shortCode,
-                                color = if (active) Color.White else accent,
-                                fontWeight = FontWeight.Bold,
-                                style = MaterialTheme.typography.labelMedium,
-                                modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp)
-                            )
-                        }
+                    Box(contentAlignment = Alignment.Center) {
                         Text(
-                            item.label,
-                            color = if (active) Color(0xFF134E4A) else Color(0xFF475569),
-                            fontWeight = if (active) FontWeight.Bold else FontWeight.Medium,
-                            style = MaterialTheme.typography.labelSmall,
-                            maxLines = 1,
+                            item.id.takeLast(3),
+                            color = statusColor(item.status),
+                            fontWeight = FontWeight.ExtraBold,
+                            style = MaterialTheme.typography.titleMedium
+                        )
+                    }
+                }
+                Spacer(Modifier.width(14.dp))
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        item.title,
+                        fontWeight = FontWeight.Bold,
+                        color = Color(0xFF1E293B),
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        style = MaterialTheme.typography.bodyLarge
+                    )
+                    Text(
+                        item.id,
+                        color = Color(0xFF64748B),
+                        style = MaterialTheme.typography.bodySmall
+                    )
+                }
+                StatusPill(item.status)
+            }
+            
+            Surface(
+                shape = RoundedCornerShape(12.dp),
+                color = Color(0xFFF8FAFC),
+                border = BorderStroke(1.dp, Color(0xFFF1F5F9))
+            ) {
+                Column(modifier = Modifier.fillMaxWidth().padding(12.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    Text(
+                        text = item.value,
+                        fontWeight = FontWeight.Bold,
+                        color = Color(0xFF1E293B),
+                        style = MaterialTheme.typography.bodyMedium
+                    )
+                    if (item.note.isNotBlank()) {
+                        Text(
+                            text = item.note,
+                            color = Color(0xFF64748B),
+                            style = MaterialTheme.typography.bodySmall,
+                            maxLines = 2,
                             overflow = TextOverflow.Ellipsis
                         )
                     }
                 }
             }
-        }
-    }
-}
-
-@Composable
-private fun AppLogo(size: Int) {
-    Box(
-        modifier = Modifier
-            .size(size.dp)
-            .clip(RoundedCornerShape(8.dp))
-            .background(Brush.linearGradient(listOf(Color(0xFF0D9488), Color(0xFF0891B2))))
-            .border(1.dp, Color.White.copy(alpha = 0.2f), RoundedCornerShape(8.dp)),
-        contentAlignment = Alignment.Center
-    ) {
-        Text("RT", color = Color.White, fontWeight = FontWeight.Bold)
-    }
-}
-
-@Composable
-private fun HeroCard(session: UserSession?, summary: DashboardSummary, source: DataSource) {
-    Card(shape = RoundedCornerShape(8.dp), colors = CardDefaults.cardColors(containerColor = Color.Transparent), modifier = Modifier.fillMaxWidth()) {
-        Column(
-            modifier = Modifier
-                .background(Brush.linearGradient(listOf(Color(0xFF0D9488), Color(0xFF0891B2), Color(0xFF065F46))))
-                .padding(18.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp)
-        ) {
-            Text("Xin chào, ${session?.displayName ?: "bạn"}", color = Color.White, style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
-            Text("Dữ liệu được lưu trực tiếp trong app để bạn thao tác và kiểm thử ngay.", color = Color(0xFFCCFBF1))
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
-                HeroMiniMetric("Nguồn", sourceLabel(source), Modifier.weight(1f))
-                HeroMiniMetric("Phòng trống", summary.emptyRooms.toString(), Modifier.weight(1f))
-            }
-        }
-    }
-}
-
-@Composable
-private fun HeroMiniMetric(label: String, value: String, modifier: Modifier = Modifier) {
-    Surface(modifier = modifier, shape = RoundedCornerShape(8.dp), color = Color.White.copy(alpha = 0.14f)) {
-        Column(modifier = Modifier.padding(10.dp), verticalArrangement = Arrangement.spacedBy(2.dp)) {
-            Text(label, color = Color(0xFFCCFBF1), style = MaterialTheme.typography.labelMedium)
-            Text(value, color = Color.White, fontWeight = FontWeight.Bold, maxLines = 1)
-        }
-    }
-}
-
-@Composable
-private fun StatCard(title: String, value: String, detail: String, accent: Color, modifier: Modifier = Modifier) {
-    Card(modifier = modifier, shape = RoundedCornerShape(8.dp), colors = CardDefaults.cardColors(containerColor = Color.White), border = BorderStroke(1.dp, Color(0xFFD1FAE5))) {
-        Column(modifier = Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(7.dp)) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Box(Modifier.size(8.dp).clip(CircleShape).background(accent))
-                Spacer(Modifier.width(7.dp))
-                Text(title, color = Color(0xFF64748B), maxLines = 1)
-            }
-            Text(value, style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold, color = Color(0xFF134E4A))
-            Text(detail, color = accent, maxLines = 2, style = MaterialTheme.typography.bodySmall)
-        }
-    }
-}
-
-@Composable
-private fun QuickActions(role: UserRole, onOpen: (AppScreen) -> Unit) {
-    val actions = listOf(
-        AppScreen.Rooms to if (role == UserRole.NguoiDung) "Tìm phòng" else "Quản lý phòng",
-        AppScreen.Invoices to "Hóa đơn",
-        (if (role == UserRole.NguoiDung) AppScreen.Payments else AppScreen.Electric) to if (role == UserRole.NguoiDung) "Gửi biên lai" else "Ghi điện",
-        AppScreen.Incidents to "Báo sự cố"
-    )
-    LazyRow(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-        items(actions) { action ->
-            val accent = screenAccent(action.first)
-            Surface(
-                onClick = { onOpen(action.first) },
-                shape = RoundedCornerShape(8.dp),
-                color = Color.White,
-                border = BorderStroke(1.dp, accent.copy(alpha = 0.24f)),
-                shadowElevation = 4.dp,
-                modifier = Modifier.width(164.dp)
-            ) {
-                Column(verticalArrangement = Arrangement.spacedBy(0.dp)) {
-                    Box(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .height(5.dp)
-                            .background(Brush.horizontalGradient(listOf(accent, Color(0xFFF59E0B))))
-                    )
-                    Column(modifier = Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(9.dp)) {
-                        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                            Surface(shape = RoundedCornerShape(8.dp), color = accent.copy(alpha = 0.14f)) {
-                                Text(
-                                    action.first.shortCode,
-                                    color = accent,
-                                    fontWeight = FontWeight.Bold,
-                                    modifier = Modifier.padding(horizontal = 9.dp, vertical = 5.dp)
-                                )
-                            }
-                            Box(Modifier.size(7.dp).clip(CircleShape).background(Color(0xFFF59E0B)))
-                        }
-                        Text(action.second, fontWeight = FontWeight.Bold, color = Color(0xFF134E4A), maxLines = 1, overflow = TextOverflow.Ellipsis)
-                        Text(action.first.label, color = Color(0xFF64748B), style = MaterialTheme.typography.bodySmall, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                    }
-                }
-            }
-        }
-    }
-}
-
-@Composable
-private fun ModuleHeader(screen: AppScreen, count: Int, source: DataSource) {
-    Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-        Surface(shape = RoundedCornerShape(8.dp), color = Color(0xFF0F766E), modifier = Modifier.size(44.dp)) {
-            Box(contentAlignment = Alignment.Center) { Text(screen.shortCode, color = Color.White, fontWeight = FontWeight.Bold) }
-        }
-        Spacer(Modifier.width(12.dp))
-        Column(modifier = Modifier.weight(1f)) {
-            Text(screen.label, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold, color = Color(0xFF134E4A))
-            Text("$count bản ghi • ${sourceLabel(source)}", color = Color(0xFF64748B))
-        }
-    }
-}
-
-@Composable
-private fun SearchPanel(query: String, onQueryChange: (String) -> Unit, statuses: List<String>, status: String, onStatusChange: (String) -> Unit) {
-    Card(shape = RoundedCornerShape(8.dp), colors = CardDefaults.cardColors(containerColor = Color.White), border = BorderStroke(1.dp, Color(0xFFD1FAE5))) {
-        Column(modifier = Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-            OutlinedTextField(query, onQueryChange, label = { Text("Tìm mã, tên, ghi chú hoặc số tiền") }, modifier = Modifier.fillMaxWidth(), singleLine = true, shape = RoundedCornerShape(8.dp))
-            LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                items(statuses) { item ->
-                    FilterChip(selected = status == item, onClick = { onStatusChange(item) }, label = { Text(item) })
-                }
-            }
-        }
-    }
-}
-
-@Composable
-private fun RentalListCard(item: RentalItem, canManage: Boolean, onOpen: () -> Unit, onEdit: () -> Unit, onDelete: () -> Unit) {
-    Card(modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(8.dp), colors = CardDefaults.cardColors(containerColor = Color.White), border = BorderStroke(1.dp, Color(0xFFE2E8F0))) {
-        Column(modifier = Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Box(Modifier.size(width = 5.dp, height = 52.dp).clip(RoundedCornerShape(8.dp)).background(statusColor(item.status)))
-                Spacer(Modifier.width(10.dp))
-                Surface(shape = RoundedCornerShape(8.dp), color = statusColor(item.status).copy(alpha = 0.12f), modifier = Modifier.size(42.dp)) {
-                    Box(contentAlignment = Alignment.Center) { Text(item.id.takeLast(2), color = statusColor(item.status), fontWeight = FontWeight.Bold) }
-                }
-                Spacer(Modifier.width(12.dp))
-                Column(modifier = Modifier.weight(1f)) {
-                    Text(item.title, fontWeight = FontWeight.Bold, color = Color(0xFF134E4A), maxLines = 2, overflow = TextOverflow.Ellipsis)
-                    Text(item.id, color = Color(0xFF64748B), style = MaterialTheme.typography.bodySmall)
-                }
-                StatusPill(item.status)
-            }
-            Surface(shape = RoundedCornerShape(8.dp), color = Color(0xFFF8FAFC), border = BorderStroke(1.dp, Color(0xFFE2E8F0))) {
-                Column(modifier = Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                    Text(item.value, fontWeight = FontWeight.Bold, color = Color(0xFF0F766E))
-                    Text(item.note, color = Color(0xFF64748B), maxLines = 2, overflow = TextOverflow.Ellipsis)
-                }
-            }
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
+            
+            Row(horizontalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.fillMaxWidth()) {
                 Button(
                     onClick = onOpen,
-                    shape = RoundedCornerShape(8.dp),
+                    shape = RoundedCornerShape(10.dp),
                     colors = ButtonDefaults.buttonColors(containerColor = statusColor(item.status)),
-                    elevation = ButtonDefaults.buttonElevation(defaultElevation = 3.dp, pressedElevation = 0.dp),
-                    modifier = Modifier.weight(1f).height(46.dp)
+                    modifier = Modifier.weight(1f).height(44.dp)
                 ) {
                     Text("Chi tiết", color = Color.White, fontWeight = FontWeight.Bold)
                 }
                 if (canManage) {
                     OutlinedButton(
                         onClick = onEdit,
-                        shape = RoundedCornerShape(8.dp),
-                        modifier = Modifier.weight(1f).height(46.dp)
+                        shape = RoundedCornerShape(10.dp),
+                        modifier = Modifier.weight(1f).height(44.dp)
                     ) {
                         Text("Sửa", fontWeight = FontWeight.Bold)
                     }
                     OutlinedButton(
                         onClick = onDelete,
-                        shape = RoundedCornerShape(8.dp),
-                        modifier = Modifier.weight(1f).height(46.dp)
+                        shape = RoundedCornerShape(10.dp),
+                        colors = ButtonDefaults.outlinedButtonColors(contentColor = Color(0xFFEF4444)),
+                        border = BorderStroke(1.dp, Color(0xFFFEE2E2)),
+                        modifier = Modifier.weight(1f).height(44.dp)
                     ) {
-                        Text("Xóa", color = Color(0xFFDC2626), fontWeight = FontWeight.Bold)
+                        Text("Xóa", fontWeight = FontWeight.Bold)
                     }
                 }
             }
@@ -1415,14 +1037,7 @@ private fun RentalListCard(item: RentalItem, canManage: Boolean, onOpen: () -> U
 }
 
 @Composable
-private fun StatusPill(status: String) {
-    Surface(color = statusColor(status).copy(alpha = 0.12f), shape = RoundedCornerShape(8.dp), border = BorderStroke(1.dp, statusColor(status).copy(alpha = 0.18f))) {
-        Text(status, color = statusColor(status), modifier = Modifier.padding(horizontal = 9.dp, vertical = 5.dp), style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.SemiBold)
-    }
-}
-
-@Composable
-private fun ModuleActionBar(
+internal fun ModuleActionBar(
     screen: AppScreen,
     item: RentalItem,
     role: UserRole,
@@ -1438,7 +1053,9 @@ private fun ModuleActionBar(
     onRejectRenew: () -> Unit,
     onPayInvoice: () -> Unit = {},
     onApprovePayment: () -> Unit = {},
-    onRejectPayment: () -> Unit = {}
+    onRejectPayment: () -> Unit = {},
+    onRespondIncident: () -> Unit = {},
+    onMarkNoticeRead: () -> Unit = {}
 ) {
     val showRent = role == UserRole.NguoiDung && screen == AppScreen.Rooms && item.status.equals("Còn trống", true)
     val showDecision = role != UserRole.NguoiDung && screen == AppScreen.RentRequests && item.status.contains("Chờ", true)
@@ -1448,24 +1065,27 @@ private fun ModuleActionBar(
     val showRenewDecision = role != UserRole.NguoiDung && screen == AppScreen.RenewRequests && item.status.contains("Chờ", true)
     val showPayInvoice = role == UserRole.NguoiDung && screen == AppScreen.Invoices && item.status == "Chưa thanh toán"
     val showPaymentDecision = role != UserRole.NguoiDung && screen == AppScreen.Payments && item.status == "Chờ xác nhận"
-    if (!showRent && !showDecision && !showConfirm && !showRenew && !showClose && !showRenewDecision && !showPayInvoice && !showPaymentDecision) return
+    val showRespondIncident = role != UserRole.NguoiDung && screen == AppScreen.Incidents && !item.status.equals("Đã khắc phục", true)
+    val showMarkRead = screen == AppScreen.Notices && item.status == "Mới"
+    if (!showRent && !showDecision && !showConfirm && !showRenew && !showClose && !showRenewDecision
+        && !showPayInvoice && !showPaymentDecision && !showRespondIncident && !showMarkRead) return
 
     Surface(
-        shape = RoundedCornerShape(8.dp),
+        shape = RoundedCornerShape(16.dp),
         color = Color.White,
-        border = BorderStroke(1.dp, Color(0xFFD1FAE5)),
+        border = BorderStroke(1.dp, Color(0xFFF1F5F9)),
         shadowElevation = 2.dp
     ) {
         Row(
-            modifier = Modifier.fillMaxWidth().padding(10.dp),
-            horizontalArrangement = Arrangement.spacedBy(8.dp)
+            modifier = Modifier.fillMaxWidth().padding(12.dp),
+            horizontalArrangement = Arrangement.spacedBy(10.dp)
         ) {
             if (showRent) {
                 Button(
                     onClick = onRentRoom,
-                    shape = RoundedCornerShape(8.dp),
+                    shape = RoundedCornerShape(10.dp),
                     colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF0F766E)),
-                    modifier = Modifier.fillMaxWidth().height(46.dp)
+                    modifier = Modifier.fillMaxWidth().height(44.dp)
                 ) {
                     Text("Gửi yêu cầu thuê", color = Color.White, fontWeight = FontWeight.Bold)
                 }
@@ -1473,43 +1093,47 @@ private fun ModuleActionBar(
             if (showDecision) {
                 Button(
                     onClick = onApproveRequest,
-                    shape = RoundedCornerShape(8.dp),
-                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF059669)),
-                    modifier = Modifier.weight(1f).height(46.dp)
+                    shape = RoundedCornerShape(10.dp),
+                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF10B981)),
+                    modifier = Modifier.weight(1f).height(44.dp)
                 ) {
                     Text("Duyệt", color = Color.White, fontWeight = FontWeight.Bold)
                 }
                 OutlinedButton(
                     onClick = onRejectRequest,
-                    shape = RoundedCornerShape(8.dp),
-                    modifier = Modifier.weight(1f).height(46.dp)
+                    shape = RoundedCornerShape(10.dp),
+                    colors = ButtonDefaults.outlinedButtonColors(contentColor = Color(0xFFEF4444)),
+                    border = BorderStroke(1.dp, Color(0xFFFEE2E2)),
+                    modifier = Modifier.weight(1f).height(44.dp)
                 ) {
-                    Text("Từ chối", color = Color(0xFFDC2626), fontWeight = FontWeight.Bold)
+                    Text("Từ chối", fontWeight = FontWeight.Bold)
                 }
             }
             if (showConfirm) {
                 Button(
                     onClick = onConfirmContract,
-                    shape = RoundedCornerShape(8.dp),
-                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF059669)),
-                    modifier = Modifier.weight(1f).height(46.dp)
+                    shape = RoundedCornerShape(10.dp),
+                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF10B981)),
+                    modifier = Modifier.weight(1f).height(44.dp)
                 ) {
                     Text("Xác nhận", color = Color.White, fontWeight = FontWeight.Bold)
                 }
                 OutlinedButton(
                     onClick = onRejectContract,
-                    shape = RoundedCornerShape(8.dp),
-                    modifier = Modifier.weight(1f).height(46.dp)
+                    shape = RoundedCornerShape(10.dp),
+                    colors = ButtonDefaults.outlinedButtonColors(contentColor = Color(0xFFEF4444)),
+                    border = BorderStroke(1.dp, Color(0xFFFEE2E2)),
+                    modifier = Modifier.weight(1f).height(44.dp)
                 ) {
-                    Text("Từ chối", color = Color(0xFFDC2626), fontWeight = FontWeight.Bold)
+                    Text("Từ chối", fontWeight = FontWeight.Bold)
                 }
             }
             if (showRenew) {
                 Button(
                     onClick = onRenewContract,
-                    shape = RoundedCornerShape(8.dp),
-                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFA855F7)),
-                    modifier = Modifier.fillMaxWidth().height(46.dp)
+                    shape = RoundedCornerShape(10.dp),
+                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF8B5CF6)),
+                    modifier = Modifier.fillMaxWidth().height(44.dp)
                 ) {
                     Text("Gửi yêu cầu gia hạn", color = Color.White, fontWeight = FontWeight.Bold)
                 }
@@ -1517,43 +1141,47 @@ private fun ModuleActionBar(
             if (showClose) {
                 Button(
                     onClick = onCloseContract,
-                    shape = RoundedCornerShape(8.dp),
+                    shape = RoundedCornerShape(10.dp),
                     colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF0F766E)),
-                    modifier = Modifier.weight(1f).height(46.dp)
+                    modifier = Modifier.weight(1f).height(44.dp)
                 ) {
                     Text("Kết thúc", color = Color.White, fontWeight = FontWeight.Bold)
                 }
                 OutlinedButton(
                     onClick = onCancelContract,
-                    shape = RoundedCornerShape(8.dp),
-                    modifier = Modifier.weight(1f).height(46.dp)
+                    shape = RoundedCornerShape(10.dp),
+                    colors = ButtonDefaults.outlinedButtonColors(contentColor = Color(0xFFEF4444)),
+                    border = BorderStroke(1.dp, Color(0xFFFEE2E2)),
+                    modifier = Modifier.weight(1f).height(44.dp)
                 ) {
-                    Text("Hủy", color = Color(0xFFDC2626), fontWeight = FontWeight.Bold)
+                    Text("Hủy hợp đồng", fontWeight = FontWeight.Bold)
                 }
             }
             if (showRenewDecision) {
                 Button(
                     onClick = onApproveRenew,
-                    shape = RoundedCornerShape(8.dp),
-                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF059669)),
-                    modifier = Modifier.weight(1f).height(46.dp)
+                    shape = RoundedCornerShape(10.dp),
+                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF10B981)),
+                    modifier = Modifier.weight(1f).height(44.dp)
                 ) {
                     Text("Duyệt gia hạn", color = Color.White, fontWeight = FontWeight.Bold)
                 }
                 OutlinedButton(
                     onClick = onRejectRenew,
-                    shape = RoundedCornerShape(8.dp),
-                    modifier = Modifier.weight(1f).height(46.dp)
+                    shape = RoundedCornerShape(10.dp),
+                    colors = ButtonDefaults.outlinedButtonColors(contentColor = Color(0xFFEF4444)),
+                    border = BorderStroke(1.dp, Color(0xFFFEE2E2)),
+                    modifier = Modifier.weight(1f).height(44.dp)
                 ) {
-                    Text("Từ chối", color = Color(0xFFDC2626), fontWeight = FontWeight.Bold)
+                    Text("Từ chối", fontWeight = FontWeight.Bold)
                 }
             }
             if (showPayInvoice) {
                 Button(
                     onClick = onPayInvoice,
-                    shape = RoundedCornerShape(8.dp),
+                    shape = RoundedCornerShape(10.dp),
                     colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFEA580C)),
-                    modifier = Modifier.fillMaxWidth().height(46.dp)
+                    modifier = Modifier.fillMaxWidth().height(44.dp)
                 ) {
                     Text("Thanh toán ngay", color = Color.White, fontWeight = FontWeight.Bold)
                 }
@@ -1561,1196 +1189,43 @@ private fun ModuleActionBar(
             if (showPaymentDecision) {
                 Button(
                     onClick = onApprovePayment,
-                    shape = RoundedCornerShape(8.dp),
-                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF059669)),
-                    modifier = Modifier.weight(1f).height(46.dp)
+                    shape = RoundedCornerShape(10.dp),
+                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF10B981)),
+                    modifier = Modifier.weight(1f).height(44.dp)
                 ) {
                     Text("Xác nhận", color = Color.White, fontWeight = FontWeight.Bold)
                 }
                 OutlinedButton(
                     onClick = onRejectPayment,
-                    shape = RoundedCornerShape(8.dp),
-                    modifier = Modifier.weight(1f).height(46.dp)
+                    shape = RoundedCornerShape(10.dp),
+                    colors = ButtonDefaults.outlinedButtonColors(contentColor = Color(0xFFEF4444)),
+                    border = BorderStroke(1.dp, Color(0xFFFEE2E2)),
+                    modifier = Modifier.weight(1f).height(44.dp)
                 ) {
-                    Text("Từ chối", color = Color(0xFFDC2626), fontWeight = FontWeight.Bold)
+                    Text("Từ chối", fontWeight = FontWeight.Bold)
+                }
+            }
+            if (showRespondIncident) {
+                Button(
+                    onClick = onRespondIncident,
+                    shape = RoundedCornerShape(10.dp),
+                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFEF4444)),
+                    modifier = Modifier.fillMaxWidth().height(44.dp)
+                ) {
+                    Text("Phản hồi sự cố", color = Color.White, fontWeight = FontWeight.Bold)
+                }
+            }
+            if (showMarkRead) {
+                OutlinedButton(
+                    onClick = onMarkNoticeRead,
+                    shape = RoundedCornerShape(10.dp),
+                    colors = ButtonDefaults.outlinedButtonColors(contentColor = Color(0xFF3B82F6)),
+                    border = BorderStroke(1.dp, Color(0xFFDBEAFE)),
+                    modifier = Modifier.fillMaxWidth().height(44.dp)
+                ) {
+                    Text("Đánh dấu đã đọc", fontWeight = FontWeight.Bold)
                 }
             }
         }
     }
 }
-
-
-@Composable
-private fun ContractEditorDialog(
-    item: RentalItem,
-    onDismiss: () -> Unit,
-    onSave: (String, String, String, String, String, String, String) -> Unit
-) {
-    var roomId by remember(item) { mutableStateOf(item.detail("roomId")) }
-    var tenantUsername by remember(item) { mutableStateOf(item.detail("tenantUsername")) }
-    var startDate by remember(item) { mutableStateOf(item.detail("startDate")) }
-    var endDate by remember(item) { mutableStateOf(item.detail("endDate")) }
-    var deposit by remember(item) { mutableStateOf(item.detail("deposit")) }
-    var note by remember(item) { mutableStateOf(item.note) }
-    var status by remember(item) { mutableStateOf(item.status.ifBlank { "Chờ người thuê xác nhận" }) }
-    var localError by remember { mutableStateOf<String?>(null) }
-
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text(if (item.id.isBlank()) "Tạo hợp đồng" else "Sửa hợp đồng") },
-        text = {
-            LazyColumn(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                item {
-                    OutlinedTextField(
-                        value = roomId,
-                        onValueChange = { roomId = it },
-                        label = { Text("Mã phòng") },
-                        modifier = Modifier.fillMaxWidth(),
-                        singleLine = true,
-                        shape = RoundedCornerShape(8.dp)
-                    )
-                }
-                item {
-                    OutlinedTextField(
-                        value = tenantUsername,
-                        onValueChange = { tenantUsername = it },
-                        label = { Text("Tên đăng nhập người thuê") },
-                        modifier = Modifier.fillMaxWidth(),
-                        singleLine = true,
-                        shape = RoundedCornerShape(8.dp)
-                    )
-                }
-                item {
-                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
-                        OutlinedTextField(
-                            value = startDate,
-                            onValueChange = { startDate = it },
-                            label = { Text("Ngày bắt đầu") },
-                            modifier = Modifier.weight(1f),
-                            singleLine = true,
-                            shape = RoundedCornerShape(8.dp)
-                        )
-                        OutlinedTextField(
-                            value = endDate,
-                            onValueChange = { endDate = it },
-                            label = { Text("Ngày kết thúc") },
-                            modifier = Modifier.weight(1f),
-                            singleLine = true,
-                            shape = RoundedCornerShape(8.dp)
-                        )
-                    }
-                }
-                item {
-                    OutlinedTextField(
-                        value = deposit,
-                        onValueChange = { deposit = it },
-                        label = { Text("Tiền cọc") },
-                        modifier = Modifier.fillMaxWidth(),
-                        singleLine = true,
-                        shape = RoundedCornerShape(8.dp)
-                    )
-                }
-                item {
-                    OutlinedTextField(
-                        value = status,
-                        onValueChange = { status = it },
-                        label = { Text("Trạng thái") },
-                        modifier = Modifier.fillMaxWidth(),
-                        singleLine = true,
-                        shape = RoundedCornerShape(8.dp)
-                    )
-                }
-                item {
-                    OutlinedTextField(
-                        value = note,
-                        onValueChange = { note = it },
-                        label = { Text("Ghi chú / điều khoản") },
-                        modifier = Modifier.fillMaxWidth(),
-                        minLines = 2,
-                        shape = RoundedCornerShape(8.dp)
-                    )
-                }
-                localError?.let {
-                    item { Text(it, color = Color(0xFFDC2626), style = MaterialTheme.typography.bodySmall) }
-                }
-            }
-        },
-        confirmButton = {
-            Button(
-                onClick = {
-                    if (roomId.isBlank() || tenantUsername.isBlank() || startDate.isBlank() || endDate.isBlank()) {
-                        localError = "Vui lòng nhập đủ mã phòng, người thuê, ngày bắt đầu và ngày kết thúc."
-                    } else {
-                        onSave(roomId.trim(), tenantUsername.trim(), startDate.trim(), endDate.trim(), deposit.trim(), note.trim(), status.trim())
-                    }
-                },
-                shape = RoundedCornerShape(8.dp),
-                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF6366F1))
-            ) {
-                Text("Lưu hợp đồng")
-            }
-        },
-        dismissButton = { TextButton(onClick = onDismiss) { Text("Hủy") } }
-    )
-}
-
-@Composable
-private fun RenewRequestDialog(contract: RentalItem, onDismiss: () -> Unit, onSubmit: (String, String) -> Unit) {
-    var newEndDate by remember(contract) { mutableStateOf(contract.detail("endDate")) }
-    var note by remember(contract) { mutableStateOf("Mình muốn gia hạn hợp đồng này.") }
-    var localError by remember { mutableStateOf<String?>(null) }
-
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text("Gửi yêu cầu gia hạn") },
-        text = {
-            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                DetailRow("Hợp đồng", contract.title)
-                DetailRow("Ngày kết thúc hiện tại", contract.detail("endDate").ifBlank { contract.value })
-                OutlinedTextField(
-                    value = newEndDate,
-                    onValueChange = { newEndDate = it },
-                    label = { Text("Ngày kết thúc mới") },
-                    modifier = Modifier.fillMaxWidth(),
-                    singleLine = true,
-                    shape = RoundedCornerShape(8.dp)
-                )
-                OutlinedTextField(
-                    value = note,
-                    onValueChange = { note = it },
-                    label = { Text("Ghi chú") },
-                    modifier = Modifier.fillMaxWidth(),
-                    minLines = 2,
-                    shape = RoundedCornerShape(8.dp)
-                )
-                localError?.let { Text(it, color = Color(0xFFDC2626), style = MaterialTheme.typography.bodySmall) }
-            }
-        },
-        confirmButton = {
-            Button(
-                onClick = {
-                    if (newEndDate.isBlank()) localError = "Vui lòng nhập ngày kết thúc mới." else onSubmit(newEndDate.trim(), note.trim())
-                },
-                shape = RoundedCornerShape(8.dp),
-                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFA855F7))
-            ) {
-                Text("Gửi gia hạn")
-            }
-        },
-        dismissButton = { TextButton(onClick = onDismiss) { Text("Hủy") } }
-    )
-}
-
-@Composable
-private fun RentRequestDialog(room: RentalItem, onDismiss: () -> Unit, onSubmit: (String, String) -> Unit) {
-    var duration by remember(room) { mutableStateOf("6 tháng") }
-    var note by remember(room) { mutableStateOf("Mình muốn thuê phòng này.") }
-
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text("Gửi yêu cầu thuê") },
-        text = {
-            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                DetailRow("Phòng", room.title)
-                DetailRow("Giá", room.value)
-                OutlinedTextField(
-                    value = duration,
-                    onValueChange = { duration = it },
-                    label = { Text("Thời hạn mong muốn") },
-                    modifier = Modifier.fillMaxWidth(),
-                    singleLine = true,
-                    shape = RoundedCornerShape(8.dp)
-                )
-                OutlinedTextField(
-                    value = note,
-                    onValueChange = { note = it },
-                    label = { Text("Ghi chú") },
-                    modifier = Modifier.fillMaxWidth(),
-                    minLines = 2,
-                    shape = RoundedCornerShape(8.dp)
-                )
-            }
-        },
-        confirmButton = {
-            Button(
-                onClick = { onSubmit(duration, note) },
-                shape = RoundedCornerShape(8.dp),
-                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF0F766E))
-            ) {
-                Text("Gửi yêu cầu")
-            }
-        },
-        dismissButton = { TextButton(onClick = onDismiss) { Text("Hủy") } }
-    )
-}
-
-// ─── Router: điều hướng sang form dialog đúng theo màn hình ─────────────────
-@Composable
-private fun SpecializedEditDialog(
-    screen: AppScreen,
-    item: RentalItem,
-    houses: List<RentalItem>,
-    rooms: List<RentalItem>,
-    invoices: List<RentalItem>,
-    onDismiss: () -> Unit,
-    onSaveUtility: (AppScreen, String, String, Double, Double, Double) -> Unit,
-    onSaveInvoice: (String, String, Double, String) -> Unit,
-    onSavePayment: (String, String, String, String) -> Unit,
-    onSave: (RentalItem) -> Unit,
-    repository: RentalRepository
-) {
-    when (screen) {
-        AppScreen.Houses -> HouseFormDialog(item, onDismiss, onSave)
-        AppScreen.RoomTypes -> RoomTypeFormDialog(item, onDismiss, onSave)
-        AppScreen.Rooms -> RoomFormDialog(item, houses, onDismiss, onSave)
-        AppScreen.Services -> ServiceFormDialog(item, onDismiss, onSave)
-        AppScreen.Electric, AppScreen.Water -> UtilityReadingFormDialog(screen, item, rooms, onDismiss, onSaveUtility, repository)
-        AppScreen.Invoices -> InvoiceFormDialog(item, rooms, onDismiss, onSaveInvoice)
-        AppScreen.Payments -> SubmitPaymentFormDialog(item, invoices, onDismiss, onSavePayment)
-        else -> EditItemDialog(screen, item, onDismiss, onSave)
-    }
-}
-
-
-// ─── Nhà trọ ─────────────────────────────────────────────────────────────────
-@Composable
-private fun HouseFormDialog(item: RentalItem, onDismiss: () -> Unit, onSave: (RentalItem) -> Unit) {
-    var name by remember(item) { mutableStateOf(item.title) }
-    var address by remember(item) { mutableStateOf(item.note) }
-    var roomCount by remember(item) { mutableStateOf(item.value.ifBlank { "0 phòng" }) }
-    var status by remember(item) { mutableStateOf(item.status.ifBlank { "Đang hoạt động" }) }
-    var error by remember { mutableStateOf<String?>(null) }
-
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = {
-            Text(
-                if (item.id.isBlank()) "Thêm nhà trọ" else "Sửa nhà trọ",
-                fontWeight = FontWeight.Bold, color = Color(0xFF134E4A)
-            )
-        },
-        text = {
-            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                OutlinedTextField(
-                    value = name, onValueChange = { name = it },
-                    label = { Text("Tên nhà trọ *") },
-                    modifier = Modifier.fillMaxWidth(), singleLine = true,
-                    shape = RoundedCornerShape(8.dp)
-                )
-                OutlinedTextField(
-                    value = address, onValueChange = { address = it },
-                    label = { Text("Địa chỉ") },
-                    modifier = Modifier.fillMaxWidth(), singleLine = true,
-                    shape = RoundedCornerShape(8.dp)
-                )
-                OutlinedTextField(
-                    value = roomCount, onValueChange = { roomCount = it },
-                    label = { Text("Số phòng (VD: 20 phòng)") },
-                    modifier = Modifier.fillMaxWidth(), singleLine = true,
-                    shape = RoundedCornerShape(8.dp)
-                )
-                Text("Trạng thái", style = MaterialTheme.typography.labelMedium, color = Color(0xFF64748B))
-                LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    items(listOf("Đang hoạt động", "Tạm dừng")) { s ->
-                        FilterChip(selected = status == s, onClick = { status = s }, label = { Text(s) })
-                    }
-                }
-                error?.let { Text(it, color = Color(0xFFDC2626), style = MaterialTheme.typography.bodySmall) }
-            }
-        },
-        confirmButton = {
-            Button(
-                onClick = {
-                    if (name.isBlank()) error = "Tên nhà trọ không được để trống."
-                    else onSave(item.copy(title = name.trim(), status = status, value = roomCount.trim(), note = address.trim()))
-                },
-                shape = RoundedCornerShape(8.dp),
-                colors = ButtonDefaults.buttonColors(containerColor = screenAccent(AppScreen.Houses))
-            ) { Text("Lưu nhà trọ") }
-        },
-        dismissButton = { TextButton(onClick = onDismiss) { Text("Hủy") } }
-    )
-}
-
-// ─── Loại phòng ───────────────────────────────────────────────────────────────
-@Composable
-private fun RoomTypeFormDialog(item: RentalItem, onDismiss: () -> Unit, onSave: (RentalItem) -> Unit) {
-    var name by remember(item) { mutableStateOf(item.title) }
-    var priceRange by remember(item) { mutableStateOf(item.value) }
-    var note by remember(item) { mutableStateOf(item.note) }
-    var status by remember(item) { mutableStateOf(item.status.ifBlank { "Đang dùng" }) }
-    var error by remember { mutableStateOf<String?>(null) }
-
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = {
-            Text(
-                if (item.id.isBlank()) "Thêm loại phòng" else "Sửa loại phòng",
-                fontWeight = FontWeight.Bold, color = Color(0xFF134E4A)
-            )
-        },
-        text = {
-            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                OutlinedTextField(
-                    value = name, onValueChange = { name = it },
-                    label = { Text("Tên loại phòng *") },
-                    modifier = Modifier.fillMaxWidth(), singleLine = true,
-                    shape = RoundedCornerShape(8.dp)
-                )
-                OutlinedTextField(
-                    value = priceRange, onValueChange = { priceRange = it },
-                    label = { Text("Khoảng giá (VD: 2.000.000đ - 3.500.000đ)") },
-                    modifier = Modifier.fillMaxWidth(), singleLine = true,
-                    shape = RoundedCornerShape(8.dp)
-                )
-                Text("Trạng thái", style = MaterialTheme.typography.labelMedium, color = Color(0xFF64748B))
-                LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    items(listOf("Đang dùng", "Ngừng dùng")) { s ->
-                        FilterChip(selected = status == s, onClick = { status = s }, label = { Text(s) })
-                    }
-                }
-                OutlinedTextField(
-                    value = note, onValueChange = { note = it },
-                    label = { Text("Ghi chú") },
-                    modifier = Modifier.fillMaxWidth(), minLines = 2,
-                    shape = RoundedCornerShape(8.dp)
-                )
-                error?.let { Text(it, color = Color(0xFFDC2626), style = MaterialTheme.typography.bodySmall) }
-            }
-        },
-        confirmButton = {
-            Button(
-                onClick = {
-                    if (name.isBlank()) error = "Tên loại phòng không được để trống."
-                    else onSave(item.copy(title = name.trim(), status = status, value = priceRange.trim(), note = note.trim()))
-                },
-                shape = RoundedCornerShape(8.dp),
-                colors = ButtonDefaults.buttonColors(containerColor = screenAccent(AppScreen.RoomTypes))
-            ) { Text("Lưu loại phòng") }
-        },
-        dismissButton = { TextButton(onClick = onDismiss) { Text("Hủy") } }
-    )
-}
-
-// ─── Phòng ────────────────────────────────────────────────────────────────────
-@Composable
-private fun RoomFormDialog(
-    item: RentalItem,
-    houses: List<RentalItem>,
-    onDismiss: () -> Unit,
-    onSave: (RentalItem) -> Unit
-) {
-    var name by remember(item) { mutableStateOf(item.title) }
-    var houseId by remember(item) { mutableStateOf(item.detail("houseId")) }
-    var price by remember(item) { mutableStateOf(item.value) }
-    var note by remember(item) { mutableStateOf(item.note) }
-    var status by remember(item) { mutableStateOf(item.status.ifBlank { "Còn trống" }) }
-    var error by remember { mutableStateOf<String?>(null) }
-
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = {
-            Text(
-                if (item.id.isBlank()) "Thêm phòng" else "Sửa phòng",
-                fontWeight = FontWeight.Bold, color = Color(0xFF134E4A)
-            )
-        },
-        text = {
-            LazyColumn(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                item {
-                    OutlinedTextField(
-                        value = name, onValueChange = { name = it },
-                        label = { Text("Tên phòng * (VD: Phòng A01)") },
-                        modifier = Modifier.fillMaxWidth(), singleLine = true,
-                        shape = RoundedCornerShape(8.dp)
-                    )
-                }
-                item {
-                    if (houses.isNotEmpty()) {
-                        Text("Nhà trọ *", style = MaterialTheme.typography.labelMedium, color = Color(0xFF64748B))
-                        Spacer(Modifier.height(4.dp))
-                        LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                            items(houses) { house ->
-                                FilterChip(
-                                    selected = houseId == house.id,
-                                    onClick = { houseId = house.id },
-                                    label = { Text("${house.title} (${house.id})", maxLines = 1, overflow = TextOverflow.Ellipsis) }
-                                )
-                            }
-                        }
-                    } else {
-                        OutlinedTextField(
-                            value = houseId, onValueChange = { houseId = it },
-                            label = { Text("Mã nhà trọ * (VD: NT001)") },
-                            modifier = Modifier.fillMaxWidth(), singleLine = true,
-                            shape = RoundedCornerShape(8.dp)
-                        )
-                    }
-                }
-                item {
-                    OutlinedTextField(
-                        value = price, onValueChange = { price = it },
-                        label = { Text("Giá thuê * (VD: 3.200.000đ/tháng)") },
-                        modifier = Modifier.fillMaxWidth(), singleLine = true,
-                        shape = RoundedCornerShape(8.dp)
-                    )
-                }
-                item {
-                    Text("Trạng thái", style = MaterialTheme.typography.labelMedium, color = Color(0xFF64748B))
-                    Spacer(Modifier.height(4.dp))
-                    LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        items(listOf("Còn trống", "Đã thuê", "Đang giữ chỗ", "Đang sửa chữa")) { s ->
-                            FilterChip(selected = status == s, onClick = { status = s }, label = { Text(s) })
-                        }
-                    }
-                }
-                item {
-                    OutlinedTextField(
-                        value = note, onValueChange = { note = it },
-                        label = { Text("Ghi chú (Tầng, mô tả, tiện ích, ...)") },
-                        modifier = Modifier.fillMaxWidth(), minLines = 2,
-                        shape = RoundedCornerShape(8.dp)
-                    )
-                }
-                error?.let { err ->
-                    item { Text(err, color = Color(0xFFDC2626), style = MaterialTheme.typography.bodySmall) }
-                }
-            }
-        },
-        confirmButton = {
-            Button(
-                onClick = {
-                    when {
-                        name.isBlank() -> error = "Tên phòng không được để trống."
-                        houseId.isBlank() -> error = "Vui lòng chọn nhà trọ."
-                        price.isBlank() -> error = "Giá thuê không được để trống."
-                        else -> {
-                            val detailsWithHouse = item.details
-                                .filterNot { it.first == "houseId" }
-                                .toMutableList().also { it.add(0, "houseId" to houseId) }
-                            onSave(item.copy(
-                                title = name.trim(),
-                                status = status,
-                                value = price.trim(),
-                                note = note.trim(),
-                                details = detailsWithHouse
-                            ))
-                        }
-                    }
-                },
-                shape = RoundedCornerShape(8.dp),
-                colors = ButtonDefaults.buttonColors(containerColor = screenAccent(AppScreen.Rooms))
-            ) { Text("Lưu phòng") }
-        },
-        dismissButton = { TextButton(onClick = onDismiss) { Text("Hủy") } }
-    )
-}
-
-// ─── Dịch vụ ──────────────────────────────────────────────────────────────────
-@Composable
-private fun ServiceFormDialog(item: RentalItem, onDismiss: () -> Unit, onSave: (RentalItem) -> Unit) {
-    var name by remember(item) { mutableStateOf(item.title) }
-    var unitPrice by remember(item) { mutableStateOf(item.value) }
-    var unit by remember(item) { mutableStateOf(item.detail("unit").ifBlank { "tháng" }) }
-    var note by remember(item) { mutableStateOf(item.note) }
-    var status by remember(item) { mutableStateOf(item.status.ifBlank { "Tính phí" }) }
-    var error by remember { mutableStateOf<String?>(null) }
-
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = {
-            Text(
-                if (item.id.isBlank()) "Thêm dịch vụ" else "Sửa dịch vụ",
-                fontWeight = FontWeight.Bold, color = Color(0xFF134E4A)
-            )
-        },
-        text = {
-            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                OutlinedTextField(
-                    value = name, onValueChange = { name = it },
-                    label = { Text("Tên dịch vụ * (VD: Internet, Điện, Nước)") },
-                    modifier = Modifier.fillMaxWidth(), singleLine = true,
-                    shape = RoundedCornerShape(8.dp)
-                )
-                OutlinedTextField(
-                    value = unitPrice, onValueChange = { unitPrice = it },
-                    label = { Text("Đơn giá * (VD: 100.000đ/tháng)") },
-                    modifier = Modifier.fillMaxWidth(), singleLine = true,
-                    shape = RoundedCornerShape(8.dp)
-                )
-                Text("Đơn vị tính", style = MaterialTheme.typography.labelMedium, color = Color(0xFF64748B))
-                LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    items(listOf("tháng", "phòng", "người", "kWh", "m3")) { u ->
-                        FilterChip(selected = unit == u, onClick = { unit = u }, label = { Text(u) })
-                    }
-                }
-                Text("Trạng thái", style = MaterialTheme.typography.labelMedium, color = Color(0xFF64748B))
-                LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    items(listOf("Tính phí", "Miễn phí", "Tạm dừng")) { s ->
-                        FilterChip(selected = status == s, onClick = { status = s }, label = { Text(s) })
-                    }
-                }
-                OutlinedTextField(
-                    value = note, onValueChange = { note = it },
-                    label = { Text("Ghi chú") },
-                    modifier = Modifier.fillMaxWidth(), minLines = 2,
-                    shape = RoundedCornerShape(8.dp)
-                )
-                error?.let { Text(it, color = Color(0xFFDC2626), style = MaterialTheme.typography.bodySmall) }
-            }
-        },
-        confirmButton = {
-            Button(
-                onClick = {
-                    when {
-                        name.isBlank() -> error = "Tên dịch vụ không được để trống."
-                        unitPrice.isBlank() -> error = "Đơn giá không được để trống."
-                        else -> {
-                            val newDetails = item.details.filterNot { it.first == "unit" } + ("unit" to unit)
-                            onSave(item.copy(
-                                title = name.trim(), status = status,
-                                value = unitPrice.trim(), note = note.trim(),
-                                details = newDetails
-                            ))
-                        }
-                    }
-                },
-                shape = RoundedCornerShape(8.dp),
-                colors = ButtonDefaults.buttonColors(containerColor = screenAccent(AppScreen.Services))
-            ) { Text("Lưu dịch vụ") }
-        },
-        dismissButton = { TextButton(onClick = onDismiss) { Text("Hủy") } }
-    )
-}
-
-// ─── Ghi chỉ số Điện/Nước ──────────────────────────────────────────────────
-@Composable
-private fun UtilityReadingFormDialog(
-    screen: AppScreen,
-    item: RentalItem,
-    rooms: List<RentalItem>,
-    onDismiss: () -> Unit,
-    onSaveUtility: (AppScreen, String, String, Double, Double, Double) -> Unit,
-    repository: RentalRepository
-) {
-    var roomId by remember(item) { mutableStateOf(item.detail("roomId")) }
-    var period by remember(item) { mutableStateOf(item.detail("period").ifBlank { "2026-06" }) }
-    var oldIndex by remember(item) { mutableStateOf(item.detail("oldIndex").toDoubleOrNull() ?: 0.0) }
-    var newIndexStr by remember(item) { mutableStateOf(item.detail("newIndex").ifBlank { "" }) }
-    val defaultPrice = if (screen == AppScreen.Electric) 3500.0 else 15000.0
-    var priceStr by remember(item) { mutableStateOf(item.detail("price").ifBlank { defaultPrice.toLong().toString() }) }
-    var error by remember { mutableStateOf<String?>(null) }
-    var loadingOldIndex by remember { mutableStateOf(false) }
-
-    LaunchedEffect(roomId) {
-        if (roomId.isNotBlank() && item.id.isBlank()) {
-            loadingOldIndex = true
-            repository.getLatestUtilityIndex(screen, roomId)
-                .onSuccess { oldIndex = it }
-                .onFailure { /* fallback */ }
-            loadingOldIndex = false
-        }
-    }
-
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = {
-            Text(
-                if (item.id.isBlank()) "Ghi chỉ số ${screen.label.lowercase()}" else "Sửa chỉ số ${screen.label.lowercase()}",
-                fontWeight = FontWeight.Bold, color = Color(0xFF134E4A)
-            )
-        },
-        text = {
-            LazyColumn(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                item {
-                    if (rooms.isNotEmpty()) {
-                        Text("Chọn phòng *", style = MaterialTheme.typography.labelMedium, color = Color(0xFF64748B))
-                        Spacer(Modifier.height(4.dp))
-                        LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                            items(rooms) { room ->
-                                FilterChip(
-                                    selected = roomId == room.id,
-                                    onClick = { roomId = room.id },
-                                    label = { Text(room.title) }
-                                )
-                            }
-                        }
-                    } else {
-                        OutlinedTextField(
-                            value = roomId, onValueChange = { roomId = it },
-                            label = { Text("Mã phòng * (VD: P101)") },
-                            modifier = Modifier.fillMaxWidth(), singleLine = true,
-                            shape = RoundedCornerShape(8.dp)
-                        )
-                    }
-                }
-                item {
-                    OutlinedTextField(
-                        value = period, onValueChange = { period = it },
-                        label = { Text("Kỳ ghi chỉ số * (VD: 2026-06)") },
-                        modifier = Modifier.fillMaxWidth(), singleLine = true,
-                        shape = RoundedCornerShape(8.dp)
-                    )
-                }
-                item {
-                    Row(horizontalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.fillMaxWidth()) {
-                        OutlinedTextField(
-                            value = if (loadingOldIndex) "Đang tải..." else oldIndex.toString(),
-                            onValueChange = {},
-                            label = { Text("Chỉ số cũ") },
-                            enabled = false,
-                            modifier = Modifier.weight(1f),
-                            shape = RoundedCornerShape(8.dp)
-                        )
-                        OutlinedTextField(
-                            value = newIndexStr,
-                            onValueChange = { newIndexStr = it },
-                            label = { Text("Chỉ số mới *") },
-                            modifier = Modifier.weight(1f),
-                            singleLine = true,
-                            shape = RoundedCornerShape(8.dp)
-                        )
-                    }
-                }
-                item {
-                    OutlinedTextField(
-                        value = priceStr, onValueChange = { priceStr = it },
-                        label = { Text("Đơn giá (${if (screen == AppScreen.Electric) "đ/kWh" else "đ/m3"})") },
-                        modifier = Modifier.fillMaxWidth(), singleLine = true,
-                        shape = RoundedCornerShape(8.dp)
-                    )
-                }
-                error?.let { err ->
-                    item { Text(err, color = Color(0xFFDC2626), style = MaterialTheme.typography.bodySmall) }
-                }
-            }
-        },
-        confirmButton = {
-            Button(
-                onClick = {
-                    val newIndex = newIndexStr.toDoubleOrNull()
-                    val price = priceStr.toDoubleOrNull()
-                    when {
-                        roomId.isBlank() -> error = "Vui lòng chọn phòng."
-                        period.isBlank() -> error = "Vui lòng nhập kỳ ghi."
-                        newIndex == null -> error = "Vui lòng nhập chỉ số mới hợp lệ."
-                        newIndex < oldIndex -> error = "Chỉ số mới không được nhỏ hơn chỉ số cũ."
-                        price == null || price <= 0 -> error = "Vui lòng nhập đơn giá hợp lệ."
-                        else -> {
-                            onSaveUtility(screen, roomId, period.trim(), oldIndex, newIndex, price)
-                        }
-                    }
-                },
-                shape = RoundedCornerShape(8.dp),
-                colors = ButtonDefaults.buttonColors(containerColor = screenAccent(screen))
-            ) { Text("Lưu chỉ số") }
-        },
-        dismissButton = { TextButton(onClick = onDismiss) { Text("Hủy") } }
-    )
-}
-
-// ─── Lập Hóa Đơn ─────────────────────────────────────────────────────────────
-@Composable
-private fun InvoiceFormDialog(
-    item: RentalItem,
-    rooms: List<RentalItem>,
-    onDismiss: () -> Unit,
-    onSaveInvoice: (String, String, Double, String) -> Unit
-) {
-    var roomId by remember(item) { mutableStateOf(item.detail("roomId")) }
-    var period by remember(item) { mutableStateOf(item.detail("period").ifBlank { "2026-06" }) }
-    var otherCostStr by remember(item) { mutableStateOf(item.detail("otherCost").ifBlank { "0" }) }
-    var otherNote by remember(item) { mutableStateOf(item.detail("otherNote")) }
-    var error by remember { mutableStateOf<String?>(null) }
-
-    val selectedRoom = rooms.firstOrNull { it.id == roomId }
-
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = {
-            Text(
-                if (item.id.isBlank()) "Tạo hóa đơn" else "Sửa hóa đơn",
-                fontWeight = FontWeight.Bold, color = Color(0xFF134E4A)
-            )
-        },
-        text = {
-            LazyColumn(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                item {
-                    if (rooms.isNotEmpty()) {
-                        val rentedRooms = rooms.filter { it.status.equals("Đã thuê", true) || it.detail("tenantUsername").isNotBlank() }
-                        Text("Chọn phòng thuê *", style = MaterialTheme.typography.labelMedium, color = Color(0xFF64748B))
-                        Spacer(Modifier.height(4.dp))
-                        LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                            items(rentedRooms) { room ->
-                                FilterChip(
-                                    selected = roomId == room.id,
-                                    onClick = { roomId = room.id },
-                                    label = { Text("${room.title} (${room.id})") }
-                                )
-                            }
-                        }
-                        if (rentedRooms.isEmpty()) {
-                            Text("Không có phòng nào đang được thuê.", color = Color(0xFFDC2626), style = MaterialTheme.typography.bodySmall)
-                        }
-                    } else {
-                        OutlinedTextField(
-                            value = roomId, onValueChange = { roomId = it },
-                            label = { Text("Mã phòng * (VD: P101)") },
-                            modifier = Modifier.fillMaxWidth(), singleLine = true,
-                            shape = RoundedCornerShape(8.dp)
-                        )
-                    }
-                }
-                item {
-                    OutlinedTextField(
-                        value = period, onValueChange = { period = it },
-                        label = { Text("Kỳ hóa đơn * (VD: 2026-06)") },
-                        modifier = Modifier.fillMaxWidth(), singleLine = true,
-                        shape = RoundedCornerShape(8.dp)
-                    )
-                }
-                item {
-                    OutlinedTextField(
-                        value = otherCostStr, onValueChange = { otherCostStr = it },
-                        label = { Text("Chi phí phát sinh (nếu có)") },
-                        modifier = Modifier.fillMaxWidth(), singleLine = true,
-                        shape = RoundedCornerShape(8.dp)
-                    )
-                }
-                item {
-                    OutlinedTextField(
-                        value = otherNote, onValueChange = { otherNote = it },
-                        label = { Text("Lý do phát sinh / Ghi chú") },
-                        modifier = Modifier.fillMaxWidth(), minLines = 2,
-                        shape = RoundedCornerShape(8.dp)
-                    )
-                }
-                
-                selectedRoom?.let { room ->
-                    val rPrice = moneyValue(room.value)
-                    item {
-                        Card(
-                            shape = RoundedCornerShape(8.dp),
-                            colors = CardDefaults.cardColors(containerColor = Color(0xFFF0FDF4)),
-                            modifier = Modifier.fillMaxWidth()
-                        ) {
-                            Column(modifier = Modifier.padding(10.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                                Text("Thông tin tạm tính:", fontWeight = FontWeight.Bold, color = Color(0xFF166534))
-                                Text("• Tiền phòng: ${com.example.myapplication.domain.util.formatMoney(rPrice)}")
-                                Text("• Tiền điện/nước/dịch vụ: Sẽ tự động đối chiếu theo kỳ $period", style = MaterialTheme.typography.bodySmall, color = Color(0xFF166534))
-                                val extra = otherCostStr.toDoubleOrNull() ?: 0.0
-                                if (extra > 0) {
-                                    Text("• Phát sinh: ${com.example.myapplication.domain.util.formatMoney(extra.toLong())}")
-                                }
-                            }
-                        }
-                    }
-                }
-                
-                error?.let { err ->
-                    item { Text(err, color = Color(0xFFDC2626), style = MaterialTheme.typography.bodySmall) }
-                }
-            }
-        },
-        confirmButton = {
-            Button(
-                onClick = {
-                    val otherCost = otherCostStr.toDoubleOrNull() ?: 0.0
-                    when {
-                        roomId.isBlank() -> error = "Vui lòng chọn phòng."
-                        period.isBlank() -> error = "Vui lòng nhập kỳ hóa đơn."
-                        otherCostStr.isNotBlank() && otherCostStr.toDoubleOrNull() == null -> error = "Chi phí phát sinh phải là số hợp lệ."
-                        else -> {
-                            onSaveInvoice(roomId, period.trim(), otherCost, otherNote.trim())
-                        }
-                    }
-                },
-                shape = RoundedCornerShape(8.dp),
-                colors = ButtonDefaults.buttonColors(containerColor = screenAccent(AppScreen.Invoices))
-            ) { Text("Tạo hóa đơn") }
-        },
-        dismissButton = { TextButton(onClick = onDismiss) { Text("Hủy") } }
-    )
-}
-
-// ─── Gửi Biên Lai Thanh Toán ──────────────────────────────────────────────────
-@Composable
-private fun SubmitPaymentFormDialog(
-    item: RentalItem,
-    invoices: List<RentalItem>,
-    onDismiss: () -> Unit,
-    onSavePayment: (String, String, String, String) -> Unit
-) {
-    var invoiceId by remember(item) { mutableStateOf(item.detail("invoiceId")) }
-    var transactionId by remember(item) { mutableStateOf(item.detail("transactionId")) }
-    var note by remember(item) { mutableStateOf(item.note) }
-    var receiptImage by remember(item) { mutableStateOf(item.detail("receiptImage")) }
-    var error by remember { mutableStateOf<String?>(null) }
-
-    val unpaidInvoices = invoices.filter { it.status != "Đã thanh toán" }
-    val selectedInvoice = invoices.firstOrNull { it.id == invoiceId }
-
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = {
-            Text(
-                "Gửi biên lai thanh toán",
-                fontWeight = FontWeight.Bold, color = Color(0xFF134E4A)
-            )
-        },
-        text = {
-            LazyColumn(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                item {
-                    if (unpaidInvoices.isNotEmpty()) {
-                        Text("Chọn hóa đơn thanh toán *", style = MaterialTheme.typography.labelMedium, color = Color(0xFF64748B))
-                        Spacer(Modifier.height(4.dp))
-                        LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                            items(unpaidInvoices) { inv ->
-                                FilterChip(
-                                    selected = invoiceId == inv.id,
-                                    onClick = { invoiceId = inv.id },
-                                    label = { Text("${inv.title} (${inv.value})") }
-                                )
-                            }
-                        }
-                    } else {
-                        OutlinedTextField(
-                            value = invoiceId,
-                            onValueChange = { invoiceId = it },
-                            label = { Text("Mã hóa đơn * (VD: HD001)") },
-                            modifier = Modifier.fillMaxWidth(),
-                            singleLine = true,
-                            shape = RoundedCornerShape(8.dp)
-                        )
-                    }
-                }
-                
-                selectedInvoice?.let { inv ->
-                    item {
-                        Card(
-                            shape = RoundedCornerShape(8.dp),
-                            colors = CardDefaults.cardColors(containerColor = Color(0xFFFFF7ED)),
-                            modifier = Modifier.fillMaxWidth()
-                        ) {
-                            Column(modifier = Modifier.padding(10.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                                Text("Thông tin thanh toán:", fontWeight = FontWeight.Bold, color = Color(0xFF9A3412))
-                                Text("• Số tiền cần nộp: ${inv.value}", fontWeight = FontWeight.SemiBold, color = Color(0xFFC2410C))
-                                Text("• Chi tiết: ${inv.note}", style = MaterialTheme.typography.bodySmall)
-                            }
-                        }
-                    }
-                }
-
-                item {
-                    OutlinedTextField(
-                        value = transactionId, onValueChange = { transactionId = it },
-                        label = { Text("Mã giao dịch ngân hàng / Ref *") },
-                        modifier = Modifier.fillMaxWidth(), singleLine = true,
-                        shape = RoundedCornerShape(8.dp)
-                    )
-                }
-                
-                item {
-                    OutlinedTextField(
-                        value = note, onValueChange = { note = it },
-                        label = { Text("Nội dung ghi chú chuyển khoản") },
-                        modifier = Modifier.fillMaxWidth(), minLines = 2,
-                        shape = RoundedCornerShape(8.dp)
-                    )
-                }
-
-                item {
-                    Text("Ảnh biên lai (Mô phỏng đính kèm)", style = MaterialTheme.typography.labelMedium, color = Color(0xFF64748B))
-                    Spacer(Modifier.height(4.dp))
-                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                        Button(
-                            onClick = { receiptImage = "data:image/png;base64,iVBORw0KGgoAAA..." },
-                            shape = RoundedCornerShape(8.dp),
-                            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF64748B))
-                        ) {
-                            Text(if (receiptImage.isBlank()) "Đính kèm ảnh" else "Đã đính kèm ảnh")
-                        }
-                        if (receiptImage.isNotBlank()) {
-                            Text("✓ Đã chọn file ảnh", color = Color(0xFF059669), style = MaterialTheme.typography.bodySmall)
-                        }
-                    }
-                }
-                
-                error?.let { err ->
-                    item { Text(err, color = Color(0xFFDC2626), style = MaterialTheme.typography.bodySmall) }
-                }
-            }
-        },
-        confirmButton = {
-            Button(
-                onClick = {
-                    when {
-                        invoiceId.isBlank() -> error = "Vui lòng chọn hóa đơn."
-                        transactionId.isBlank() -> error = "Vui lòng nhập mã giao dịch ngân hàng."
-                        else -> {
-                            onSavePayment(invoiceId, transactionId.trim(), receiptImage, note.trim())
-                        }
-                    }
-                },
-                shape = RoundedCornerShape(8.dp),
-                colors = ButtonDefaults.buttonColors(containerColor = screenAccent(AppScreen.Payments))
-            ) { Text("Gửi biên lai") }
-        },
-        dismissButton = { TextButton(onClick = onDismiss) { Text("Hủy") } }
-    )
-}
-
-// ─── Từ Chối Biên Lai Thanh Toán ──────────────────────────────────────────────
-@Composable
-private fun RejectPaymentDialog(onDismiss: () -> Unit, onSubmit: (String) -> Unit) {
-    var reason by remember { mutableStateOf("") }
-    var error by remember { mutableStateOf<String?>(null) }
-    
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text("Từ chối thanh toán", fontWeight = FontWeight.Bold, color = Color(0xFFDC2626)) },
-        text = {
-            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                Text("Vui lòng nhập lý do từ chối thanh toán để gửi đến người thuê:")
-                OutlinedTextField(
-                    value = reason,
-                    onValueChange = { reason = it },
-                    label = { Text("Lý do từ chối *") },
-                    modifier = Modifier.fillMaxWidth(),
-                    shape = RoundedCornerShape(8.dp)
-                )
-                error?.let { Text(it, color = Color(0xFFDC2626), style = MaterialTheme.typography.bodySmall) }
-            }
-        },
-        confirmButton = {
-            Button(
-                onClick = {
-                    if (reason.isBlank()) {
-                        error = "Lý do không được để trống."
-                    } else {
-                        onSubmit(reason.trim())
-                    }
-                },
-                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFDC2626)),
-                shape = RoundedCornerShape(8.dp)
-            ) {
-                Text("Gửi từ chối", color = Color.White)
-            }
-        },
-        dismissButton = {
-            TextButton(onClick = onDismiss) { Text("Hủy") }
-        }
-    )
-}
-
-@Composable
-private fun EditItemDialog(screen: AppScreen, item: RentalItem, onDismiss: () -> Unit, onSave: (RentalItem) -> Unit) {
-    var title by remember(item) { mutableStateOf(item.title) }
-    var status by remember(item) { mutableStateOf(item.status.ifBlank { defaultStatus(screen) }) }
-    var value by remember(item) { mutableStateOf(item.value) }
-    var note by remember(item) { mutableStateOf(item.note) }
-    var localError by remember { mutableStateOf<String?>(null) }
-
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text(if (item.id.isBlank()) "Thêm ${screen.label.lowercase()}" else "Sửa ${screen.label.lowercase()}") },
-        text = {
-            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                OutlinedTextField(
-                    value = title,
-                    onValueChange = { title = it },
-                    label = { Text("Tên / nội dung") },
-                    modifier = Modifier.fillMaxWidth(),
-                    singleLine = true,
-                    shape = RoundedCornerShape(8.dp)
-                )
-                OutlinedTextField(
-                    value = status,
-                    onValueChange = { status = it },
-                    label = { Text("Trạng thái") },
-                    modifier = Modifier.fillMaxWidth(),
-                    singleLine = true,
-                    shape = RoundedCornerShape(8.dp)
-                )
-                OutlinedTextField(
-                    value = value,
-                    onValueChange = { value = it },
-                    label = { Text("Giá trị / số tiền / thời hạn") },
-                    modifier = Modifier.fillMaxWidth(),
-                    singleLine = true,
-                    shape = RoundedCornerShape(8.dp)
-                )
-                OutlinedTextField(
-                    value = note,
-                    onValueChange = { note = it },
-                    label = { Text("Ghi chú") },
-                    modifier = Modifier.fillMaxWidth(),
-                    minLines = 2,
-                    shape = RoundedCornerShape(8.dp)
-                )
-                localError?.let { Text(it, color = Color(0xFFDC2626), style = MaterialTheme.typography.bodySmall) }
-            }
-        },
-        confirmButton = {
-            Button(
-                onClick = {
-                    if (title.isBlank()) {
-                        localError = "Vui lòng nhập tên hoặc nội dung."
-                    } else {
-                        onSave(
-                            item.copy(
-                                title = title.trim(),
-                                status = status.trim().ifBlank { defaultStatus(screen) },
-                                value = value.trim(),
-                                note = note.trim()
-                            )
-                        )
-                    }
-                },
-                shape = RoundedCornerShape(8.dp),
-                colors = ButtonDefaults.buttonColors(containerColor = screenAccent(screen))
-            ) {
-                Text("Lưu")
-            }
-        },
-        dismissButton = {
-            TextButton(onClick = onDismiss) { Text("Hủy") }
-        }
-    )
-}
-
-@Composable
-private fun DetailDialog(item: RentalItem, screen: AppScreen, onDismiss: () -> Unit) {
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text(item.title) },
-        text = {
-            LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                item { DetailRow("Module", screen.label) }
-                item { DetailRow("Mã", item.id) }
-                item { DetailRow("Trạng thái", item.status) }
-                item { DetailRow("Giá trị", item.value) }
-                item { DetailRow("Ghi chú", item.note) }
-                items(item.details) { DetailRow(it.first, it.second) }
-            }
-        },
-        confirmButton = { Button(onClick = onDismiss) { Text("Đóng") } }
-    )
-}
-
-@Composable
-private fun DetailRow(label: String, value: String) {
-    Column {
-        Text(label, color = Color(0xFF64748B), style = MaterialTheme.typography.labelMedium)
-        Text(value, fontWeight = FontWeight.Medium, color = Color(0xFF134E4A))
-    }
-}
-
-@Composable
-private fun SectionTitle(text: String) {
-    Row(verticalAlignment = Alignment.CenterVertically) {
-        Box(Modifier.size(width = 4.dp, height = 22.dp).clip(RoundedCornerShape(8.dp)).background(Color(0xFFF59E0B)))
-        Spacer(Modifier.width(8.dp))
-        Text(text, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, color = Color(0xFF134E4A))
-    }
-}
-
-private fun screensForRole(role: UserRole): List<AppScreen> = when (role) {
-    UserRole.Admin -> AppScreen.entries
-    UserRole.NguoiDung -> listOf(
-        AppScreen.Dashboard, AppScreen.Rooms, AppScreen.Contracts, AppScreen.Invoices,
-        AppScreen.Payments, AppScreen.Services, AppScreen.ServiceRegs, AppScreen.Electric,
-        AppScreen.Water, AppScreen.RentRequests, AppScreen.RenewRequests, AppScreen.Incidents,
-        AppScreen.Notices, AppScreen.Account
-    )
-    UserRole.ChuTro -> listOf(
-        AppScreen.Dashboard, AppScreen.Houses, AppScreen.RoomTypes, AppScreen.Rooms,
-        AppScreen.Tenants, AppScreen.Contracts, AppScreen.Invoices, AppScreen.Payments,
-        AppScreen.Services, AppScreen.ServiceRegs, AppScreen.Electric, AppScreen.Water,
-        AppScreen.RentRequests, AppScreen.RenewRequests, AppScreen.Incidents,
-        AppScreen.Notices, AppScreen.Account
-    )
-}
-
-private fun bottomScreens(role: UserRole): List<AppScreen> = when (role) {
-    UserRole.NguoiDung -> listOf(AppScreen.Dashboard, AppScreen.Rooms, AppScreen.Invoices, AppScreen.Notices, AppScreen.Account)
-    else -> listOf(AppScreen.Dashboard, AppScreen.Rooms, AppScreen.Invoices, AppScreen.Payments, AppScreen.Account)
-}
-
-private fun canManageScreen(role: UserRole, screen: AppScreen): Boolean = when (role) {
-    UserRole.Admin -> screen != AppScreen.Account
-    UserRole.ChuTro -> screen in setOf(
-        AppScreen.Houses,
-        AppScreen.RoomTypes,
-        AppScreen.Rooms,
-        AppScreen.Tenants,
-        AppScreen.Contracts,
-        AppScreen.Invoices,
-        AppScreen.Payments,
-        AppScreen.Services,
-        AppScreen.ServiceRegs,
-        AppScreen.Electric,
-        AppScreen.Water,
-        AppScreen.RentRequests,
-        AppScreen.RenewRequests,
-        AppScreen.Incidents,
-        AppScreen.Notices
-    )
-    UserRole.NguoiDung -> screen in setOf(
-        AppScreen.Payments,
-        AppScreen.Incidents
-    )
-}
-
-private fun sourceLabel(source: DataSource): String = when (source) {
-    DataSource.Api -> "API"
-    DataSource.Demo -> "Demo"
-    DataSource.Local -> "Trong app"
-}
-
-private fun defaultStatus(screen: AppScreen): String = when (screen) {
-    AppScreen.Rooms -> "Còn trống"
-    AppScreen.Invoices -> "Chưa thanh toán"
-    AppScreen.Payments -> "Chờ xác nhận"
-    AppScreen.RentRequests, AppScreen.RenewRequests -> "Chờ duyệt"
-    AppScreen.Incidents, AppScreen.Notices -> "Mới"
-    AppScreen.Users -> "Đang hoạt động"
-    else -> "Đang sử dụng"
-}
-
-private fun statusColor(status: String): Color = when {
-    status.contains("Đã", true) || status.contains("Còn trống", true) || status.contains("Đang sử dụng", true) -> Color(0xFF059669)
-    status.contains("Chờ", true) || status.contains("Chưa", true) || status.contains("Một phần", true) || status.contains("Sắp", true) || status.contains("Cần", true) -> Color(0xFFD97706)
-    status.contains("Từ chối", true) || status.contains("Hủy", true) || status.contains("Tạm dừng", true) -> Color(0xFFDC2626)
-    status.contains("Đang", true) || status.contains("Mới", true) -> Color(0xFF2563EB)
-    else -> Color(0xFF475569)
-}
-
-private fun screenAccent(screen: AppScreen): Color = when (screen) {
-    AppScreen.Dashboard -> Color(0xFF7C3AED)
-    AppScreen.Houses -> Color(0xFF0D9488)
-    AppScreen.RoomTypes -> Color(0xFF06B6D4)
-    AppScreen.Rooms -> Color(0xFF0891B2)
-    AppScreen.Tenants -> Color(0xFF10B981)
-    AppScreen.Contracts -> Color(0xFF6366F1)
-    AppScreen.Invoices -> Color(0xFFF59E0B)
-    AppScreen.Payments -> Color(0xFFEA580C)
-    AppScreen.Services -> Color(0xFF14B8A6)
-    AppScreen.ServiceRegs -> Color(0xFF84CC16)
-    AppScreen.Electric -> Color(0xFFEAB308)
-    AppScreen.Water -> Color(0xFF0284C7)
-    AppScreen.RentRequests -> Color(0xFFEC4899)
-    AppScreen.RenewRequests -> Color(0xFFA855F7)
-    AppScreen.Incidents -> Color(0xFFDC2626)
-    AppScreen.Notices -> Color(0xFF2563EB)
-    AppScreen.Users -> Color(0xFF475569)
-    AppScreen.Account -> Color(0xFF0F766E)
-}
-
-private fun RentalItem.detail(key: String): String = details.firstOrNull { it.first == key }?.second.orEmpty()
-
-private data class ConfirmData(
-    val title: String,
-    val message: String,
-    val onConfirm: () -> Unit
-)
