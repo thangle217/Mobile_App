@@ -11,27 +11,131 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.shape.CutCornerShape
+import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Home
+import androidx.compose.material.icons.filled.Lock
+import androidx.compose.material.icons.filled.Person
+import androidx.compose.material.icons.filled.Phone
+import androidx.compose.material.icons.filled.Email
+import androidx.compose.material.icons.filled.Info
+import androidx.compose.material.icons.filled.Visibility
+import androidx.compose.material.icons.filled.VisibilityOff
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Outline
+import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.graphics.Shape
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.PasswordVisualTransformation
+import androidx.compose.ui.text.input.VisualTransformation
+import androidx.compose.ui.unit.Density
+import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import com.example.myapplication.data.repository.RentalRepository
 import com.example.myapplication.domain.model.UserRole
 import com.example.myapplication.domain.model.UserSession
 import kotlinx.coroutines.launch
 import org.json.JSONObject
+import androidx.compose.foundation.Canvas
+
+class PointedShape(private val arrowWidth: Dp = 16.dp) : Shape {
+    override fun createOutline(size: Size, layoutDirection: LayoutDirection, density: Density): Outline {
+        val arrowW = with(density) { arrowWidth.toPx() }
+        val path = Path().apply {
+            moveTo(arrowW, 0f)
+            lineTo(size.width - arrowW, 0f)
+            lineTo(size.width, size.height / 2f)
+            lineTo(size.width - arrowW, size.height)
+            lineTo(arrowW, size.height)
+            lineTo(0f, size.height / 2f)
+            close()
+        }
+        return Outline.Generic(path)
+    }
+}
+
+class HexagonShape : Shape {
+    override fun createOutline(size: Size, layoutDirection: LayoutDirection, density: Density): Outline {
+        val path = Path().apply {
+            val h = size.height
+            val w = size.width
+            moveTo(w / 2f, 0f)
+            lineTo(w, h * 0.25f)
+            lineTo(w, h * 0.75f)
+            lineTo(w / 2f, h)
+            lineTo(0f, h * 0.75f)
+            lineTo(0f, h * 0.25f)
+            close()
+        }
+        return Outline.Generic(path)
+    }
+}
+
+@Composable
+fun HexTextField(
+    value: String,
+    onValueChange: (String) -> Unit,
+    placeholder: String,
+    leadingIcon: ImageVector,
+    trailingIcon: @Composable (() -> Unit)? = null,
+    visualTransformation: VisualTransformation = VisualTransformation.None,
+    enabled: Boolean = true
+) {
+    BasicTextField(
+        value = value,
+        onValueChange = onValueChange,
+        singleLine = true,
+        enabled = enabled,
+        visualTransformation = visualTransformation,
+        textStyle = LocalTextStyle.current.copy(color = Color(0xFF0F172A), fontSize = 16.sp),
+        decorationBox = { innerTextField ->
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(52.dp)
+                    .clip(PointedShape())
+                    .background(Color.White.copy(alpha = if (enabled) 0.9f else 0.5f))
+                    .padding(horizontal = 24.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Icon(
+                    imageVector = leadingIcon,
+                    contentDescription = null,
+                    tint = Color(0xFF334155),
+                    modifier = Modifier.size(20.dp)
+                )
+                Spacer(modifier = Modifier.width(12.dp))
+                Box(modifier = Modifier.width(1.dp).height(20.dp).background(Color(0xFFCBD5E1)))
+                Spacer(modifier = Modifier.width(12.dp))
+                
+                Box(modifier = Modifier.weight(1f)) {
+                    if (value.isEmpty()) {
+                        Text(placeholder, color = Color(0xFF94A3B8), fontSize = 15.sp)
+                    }
+                    innerTextField()
+                }
+                
+                if (trailingIcon != null) {
+                    trailingIcon()
+                }
+            }
+        }
+    )
+}
 
 @OptIn(ExperimentalAnimationApi::class)
 @Composable
@@ -54,6 +158,7 @@ internal fun LoginScreen(repository: RentalRepository, onLoggedIn: (UserSession)
     var error by remember { mutableStateOf<String?>(null) }
     var message by remember { mutableStateOf<String?>(null) }
     var forgotPasswordStep by remember { mutableStateOf(1) }
+    var passwordVisible by remember { mutableStateOf(false) }
 
     fun uploadFromUri(uri: Uri, onDone: (String) -> Unit) {
         loading = true
@@ -93,66 +198,74 @@ internal fun LoginScreen(repository: RentalRepository, onLoggedIn: (UserSession)
     }
 
     Box(
-        modifier = Modifier
-            .fillMaxSize()
-            .background(
-                Brush.linearGradient(
-                    colors = listOf(Color(0xFFE0F2FE), Color(0xFFF1F5F9), Color(0xFFFAE8FF))
-                )
-            )
-            .padding(16.dp),
-        contentAlignment = Alignment.Center
+        modifier = Modifier.fillMaxSize()
     ) {
-        Card(
+        // Wavy Background
+        Canvas(modifier = Modifier.fillMaxSize()) {
+            val topGradient = Brush.linearGradient(
+                colors = listOf(Color(0xFF4ADE80), Color(0xFF16A34A)) // Light Green to Green
+            )
+            val bottomGradient = Brush.linearGradient(
+                colors = listOf(Color(0xFF22C55E), Color(0xFF14532D)) // Green to Dark Green
+            )
+            
+            drawRect(brush = topGradient)
+            
+            val path = Path().apply {
+                moveTo(0f, size.height * 0.45f)
+                cubicTo(
+                    size.width * 0.3f, size.height * 0.65f,
+                    size.width * 0.7f, size.height * 0.25f,
+                    size.width, size.height * 0.5f
+                )
+                lineTo(size.width, size.height)
+                lineTo(0f, size.height)
+                close()
+            }
+            drawPath(path = path, brush = bottomGradient)
+        }
+
+        // Main Content
+        Box(
             modifier = Modifier
+                .align(Alignment.Center)
                 .fillMaxWidth()
-                .shadow(16.dp, shape = RoundedCornerShape(24.dp)),
-            shape = RoundedCornerShape(24.dp),
-            colors = CardDefaults.cardColors(containerColor = Color.White.copy(alpha = 0.95f))
+                .padding(horizontal = 24.dp)
         ) {
+            // Glassmorphism Card
             Column(
                 modifier = Modifier
-                    .padding(24.dp)
+                    .padding(top = 40.dp) // Space for the top hexagon
+                    .fillMaxWidth()
+                    .clip(CutCornerShape(40.dp))
+                    .background(Color.White.copy(alpha = 0.25f))
+                    .border(1.dp, Color.White.copy(alpha = 0.4f), CutCornerShape(40.dp))
+                    .padding(horizontal = 24.dp, vertical = 32.dp)
                     .verticalScroll(rememberScrollState()),
-                verticalArrangement = Arrangement.spacedBy(16.dp)
+                horizontalAlignment = Alignment.CenterHorizontally
             ) {
-                // Header Logo and App Title
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(12.dp),
-                    modifier = Modifier.padding(bottom = 8.dp)
-                ) {
-                    AppLogo(size = 48)
-                    Text(
-                        text = "Rental Management",
-                        style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.ExtraBold,
-                        color = Color(0xFF1E293B)
-                    )
-                }
+                Spacer(modifier = Modifier.height(24.dp))
+                
+                Text(
+                    text = authTitle(mode, forgotPasswordStep),
+                    style = MaterialTheme.typography.headlineMedium,
+                    fontWeight = FontWeight.Medium,
+                    color = Color.White,
+                    letterSpacing = 1.sp,
+                    modifier = Modifier.padding(bottom = 24.dp)
+                )
 
                 AnimatedContent(
                     targetState = mode,
                     label = "auth_transition"
                 ) { currentMode ->
-                    Column(
-                        verticalArrangement = Arrangement.spacedBy(16.dp)
-                    ) {
-                        Text(
-                            text = authTitle(currentMode, forgotPasswordStep),
-                            style = MaterialTheme.typography.headlineSmall,
-                            fontWeight = FontWeight.Bold,
-                            color = Color(0xFF0F172A),
-                            modifier = Modifier.padding(vertical = 4.dp)
-                        )
-
-                        // Custom segmented control for UserRole
+                    Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
+                        // Custom Role Selector
                         if (currentMode == AuthMode.Login || currentMode == AuthMode.Register) {
                             Row(
                                 modifier = Modifier
                                     .fillMaxWidth()
-                                    .background(Color(0xFFF8FAFC), RoundedCornerShape(12.dp))
-                                    .border(1.dp, Color(0xFFE2E8F0), RoundedCornerShape(12.dp))
+                                    .background(Color.White.copy(alpha = 0.15f), RoundedCornerShape(12.dp))
                                     .padding(4.dp),
                                 horizontalArrangement = Arrangement.spacedBy(4.dp)
                             ) {
@@ -163,19 +276,14 @@ internal fun LoginScreen(repository: RentalRepository, onLoggedIn: (UserSession)
                                         modifier = Modifier
                                             .weight(1f)
                                             .clip(RoundedCornerShape(8.dp))
-                                            .background(if (selected) Color(0xFF0284C7).copy(alpha = 0.08f) else Color.Transparent)
-                                            .border(
-                                                1.dp,
-                                                if (selected) Color(0xFF0284C7) else Color.Transparent,
-                                                RoundedCornerShape(8.dp)
-                                            )
+                                            .background(if (selected) Color.White.copy(alpha = 0.8f) else Color.Transparent)
                                             .clickable { selectRole(item) }
                                             .padding(vertical = 8.dp),
                                         contentAlignment = Alignment.Center
                                     ) {
                                         Text(
                                             text = item.label,
-                                            color = if (selected) Color(0xFF0284C7) else Color(0xFF64748B),
+                                            color = if (selected) Color(0xFF0F766E) else Color.White,
                                             fontWeight = if (selected) FontWeight.Bold else FontWeight.Medium,
                                             style = MaterialTheme.typography.bodySmall
                                         )
@@ -186,362 +294,243 @@ internal fun LoginScreen(repository: RentalRepository, onLoggedIn: (UserSession)
 
                         // Input fields
                         if (currentMode == AuthMode.Login || currentMode == AuthMode.Register) {
-                            OutlinedTextField(
+                            HexTextField(
                                 value = username,
                                 onValueChange = { username = it },
-                                label = { Text("Tên đăng nhập hoặc email") },
-                                modifier = Modifier.fillMaxWidth(),
-                                singleLine = true,
-                                shape = RoundedCornerShape(12.dp),
-                                colors = OutlinedTextFieldDefaults.colors(
-                                    focusedBorderColor = Color(0xFF0284C7),
-                                    unfocusedBorderColor = Color(0xFFCBD5E1),
-                                    focusedLabelColor = Color(0xFF0284C7),
-                                    unfocusedLabelColor = Color(0xFF64748B),
-                                    focusedContainerColor = Color(0xFFF8FAFC),
-                                    unfocusedContainerColor = Color(0xFFF8FAFC)
-                                )
+                                placeholder = "Tên đăng nhập hoặc email",
+                                leadingIcon = Icons.Default.Person
                             )
                         }
 
                         if (currentMode == AuthMode.Register) {
-                            OutlinedTextField(
+                            HexTextField(
                                 value = fullName,
                                 onValueChange = { fullName = it },
-                                label = { Text("Họ tên") },
-                                modifier = Modifier.fillMaxWidth(),
-                                singleLine = true,
-                                shape = RoundedCornerShape(12.dp),
-                                colors = OutlinedTextFieldDefaults.colors(
-                                    focusedBorderColor = Color(0xFF0284C7),
-                                    unfocusedBorderColor = Color(0xFFCBD5E1),
-                                    focusedLabelColor = Color(0xFF0284C7),
-                                    unfocusedLabelColor = Color(0xFF64748B),
-                                    focusedContainerColor = Color(0xFFF8FAFC),
-                                    unfocusedContainerColor = Color(0xFFF8FAFC)
-                                )
+                                placeholder = "Họ tên",
+                                leadingIcon = Icons.Default.Info
                             )
-                            OutlinedTextField(
+                            HexTextField(
                                 value = email,
                                 onValueChange = { email = it },
-                                label = { Text("Email") },
-                                modifier = Modifier.fillMaxWidth(),
-                                singleLine = true,
-                                shape = RoundedCornerShape(12.dp),
-                                colors = OutlinedTextFieldDefaults.colors(
-                                    focusedBorderColor = Color(0xFF0284C7),
-                                    unfocusedBorderColor = Color(0xFFCBD5E1),
-                                    focusedLabelColor = Color(0xFF0284C7),
-                                    unfocusedLabelColor = Color(0xFF64748B),
-                                    focusedContainerColor = Color(0xFFF8FAFC),
-                                    unfocusedContainerColor = Color(0xFFF8FAFC)
-                                )
+                                placeholder = "Email",
+                                leadingIcon = Icons.Default.Email
                             )
-                            OutlinedTextField(
+                            HexTextField(
                                 value = phone,
                                 onValueChange = { phone = it },
-                                label = { Text("Số điện thoại") },
-                                modifier = Modifier.fillMaxWidth(),
-                                singleLine = true,
-                                shape = RoundedCornerShape(12.dp),
-                                colors = OutlinedTextFieldDefaults.colors(
-                                    focusedBorderColor = Color(0xFF0284C7),
-                                    unfocusedBorderColor = Color(0xFFCBD5E1),
-                                    focusedLabelColor = Color(0xFF0284C7),
-                                    unfocusedLabelColor = Color(0xFF64748B),
-                                    focusedContainerColor = Color(0xFFF8FAFC),
-                                    unfocusedContainerColor = Color(0xFFF8FAFC)
-                                )
+                                placeholder = "Số điện thoại",
+                                leadingIcon = Icons.Default.Phone
                             )
                             if (role == UserRole.NguoiDung) {
-                                OutlinedTextField(
+                                HexTextField(
                                     value = cccd,
                                     onValueChange = { cccd = it },
-                                    label = { Text("CCCD/CMND") },
-                                    modifier = Modifier.fillMaxWidth(),
-                                    singleLine = true,
-                                    shape = RoundedCornerShape(12.dp),
-                                    colors = OutlinedTextFieldDefaults.colors(
-                                        focusedBorderColor = Color(0xFF0284C7),
-                                        unfocusedBorderColor = Color(0xFFCBD5E1),
-                                        focusedLabelColor = Color(0xFF0284C7),
-                                        unfocusedLabelColor = Color(0xFF64748B),
-                                        focusedContainerColor = Color(0xFFF8FAFC),
-                                        unfocusedContainerColor = Color(0xFFF8FAFC)
-                                    )
+                                    placeholder = "CCCD/CMND",
+                                    leadingIcon = Icons.Default.Info
                                 )
                                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
-                                    OutlinedButton(
-                                        onClick = { frontPicker.launch("image/*") },
-                                        modifier = Modifier.weight(1f),
-                                        shape = RoundedCornerShape(12.dp),
-                                        border = BorderStroke(1.dp, Color(0xFF0284C7))
-                                    ) { Text(if (cccdFrontUrl.isBlank()) "CCCD Mặt Trước" else "Đã chọn mặt trước", style = MaterialTheme.typography.bodySmall, maxLines = 1) }
-                                    OutlinedButton(
-                                        onClick = { backPicker.launch("image/*") },
-                                        modifier = Modifier.weight(1f),
-                                        shape = RoundedCornerShape(12.dp),
-                                        border = BorderStroke(1.dp, Color(0xFF0284C7))
-                                    ) { Text(if (cccdBackUrl.isBlank()) "CCCD Mặt Sau" else "Đã chọn mặt sau", style = MaterialTheme.typography.bodySmall, maxLines = 1) }
+                                    Box(
+                                        modifier = Modifier.weight(1f).height(48.dp).clip(PointedShape()).background(Color.White.copy(alpha = 0.85f)).clickable { frontPicker.launch("image/*") },
+                                        contentAlignment = Alignment.Center
+                                    ) { Text(if (cccdFrontUrl.isBlank()) "Mặt Trước" else "Đã chọn", color = Color(0xFF334155), fontSize = 14.sp) }
+                                    Box(
+                                        modifier = Modifier.weight(1f).height(48.dp).clip(PointedShape()).background(Color.White.copy(alpha = 0.85f)).clickable { backPicker.launch("image/*") },
+                                        contentAlignment = Alignment.Center
+                                    ) { Text(if (cccdBackUrl.isBlank()) "Mặt Sau" else "Đã chọn", color = Color(0xFF334155), fontSize = 14.sp) }
                                 }
                             }
                         }
 
                         if (currentMode == AuthMode.Forgot) {
-                            OutlinedTextField(
+                            HexTextField(
                                 value = email,
                                 onValueChange = { email = it },
-                                enabled = forgotPasswordStep == 1,
-                                label = { Text("Email đã đăng ký") },
-                                modifier = Modifier.fillMaxWidth(),
-                                singleLine = true,
-                                shape = RoundedCornerShape(12.dp),
-                                colors = OutlinedTextFieldDefaults.colors(
-                                    focusedBorderColor = Color(0xFF0284C7),
-                                    unfocusedBorderColor = Color(0xFFCBD5E1),
-                                    focusedLabelColor = Color(0xFF0284C7),
-                                    unfocusedLabelColor = Color(0xFF64748B),
-                                    focusedContainerColor = Color(0xFFF8FAFC),
-                                    unfocusedContainerColor = Color(0xFFF8FAFC)
-                                )
+                                placeholder = "Email đã đăng ký",
+                                leadingIcon = Icons.Default.Email,
+                                enabled = forgotPasswordStep == 1
                             )
                         }
 
                         if (currentMode == AuthMode.Forgot && forgotPasswordStep == 2) {
-                            OutlinedTextField(
+                            HexTextField(
                                 value = otp,
                                 onValueChange = { otp = it },
-                                label = { Text("Mã OTP/Token (nhập 123456)") },
-                                modifier = Modifier.fillMaxWidth(),
-                                singleLine = true,
-                                shape = RoundedCornerShape(12.dp),
-                                colors = OutlinedTextFieldDefaults.colors(
-                                    focusedBorderColor = Color(0xFF0284C7),
-                                    unfocusedBorderColor = Color(0xFFCBD5E1),
-                                    focusedLabelColor = Color(0xFF0284C7),
-                                    unfocusedLabelColor = Color(0xFF64748B),
-                                    focusedContainerColor = Color(0xFFF8FAFC),
-                                    unfocusedContainerColor = Color(0xFFF8FAFC)
-                                )
+                                placeholder = "Mã OTP (123456)",
+                                leadingIcon = Icons.Default.Lock
                             )
                         }
 
                         if (currentMode != AuthMode.Forgot || forgotPasswordStep == 2) {
-                            OutlinedTextField(
+                            HexTextField(
                                 value = password,
                                 onValueChange = { password = it },
-                                label = { Text(if (currentMode == AuthMode.Forgot) "Mật khẩu mới" else "Mật khẩu") },
-                                visualTransformation = PasswordVisualTransformation(),
-                                modifier = Modifier.fillMaxWidth(),
-                                singleLine = true,
-                                shape = RoundedCornerShape(12.dp),
-                                colors = OutlinedTextFieldDefaults.colors(
-                                    focusedBorderColor = Color(0xFF0284C7),
-                                    unfocusedBorderColor = Color(0xFFCBD5E1),
-                                    focusedLabelColor = Color(0xFF0284C7),
-                                    unfocusedLabelColor = Color(0xFF64748B),
-                                    focusedContainerColor = Color(0xFFF8FAFC),
-                                    unfocusedContainerColor = Color(0xFFF8FAFC)
-                                )
+                                placeholder = if (currentMode == AuthMode.Forgot) "Mật khẩu mới" else "Mật khẩu",
+                                leadingIcon = Icons.Default.Lock,
+                                visualTransformation = if (passwordVisible) VisualTransformation.None else PasswordVisualTransformation(),
+                                trailingIcon = {
+                                    Icon(
+                                        imageVector = if (passwordVisible) Icons.Default.Visibility else Icons.Default.VisibilityOff,
+                                        contentDescription = if (passwordVisible) "Ẩn mật khẩu" else "Hiện mật khẩu",
+                                        tint = Color(0xFF334155),
+                                        modifier = Modifier.size(24.dp).clickable { passwordVisible = !passwordVisible }
+                                    )
+                                }
                             )
                         }
 
                         if (currentMode == AuthMode.Register || (currentMode == AuthMode.Forgot && forgotPasswordStep == 2)) {
-                            OutlinedTextField(
+                            HexTextField(
                                 value = confirmPassword,
                                 onValueChange = { confirmPassword = it },
-                                label = { Text("Nhập lại mật khẩu") },
-                                visualTransformation = PasswordVisualTransformation(),
-                                modifier = Modifier.fillMaxWidth(),
-                                singleLine = true,
-                                shape = RoundedCornerShape(12.dp),
-                                colors = OutlinedTextFieldDefaults.colors(
-                                    focusedBorderColor = Color(0xFF0284C7),
-                                    unfocusedBorderColor = Color(0xFFCBD5E1),
-                                    focusedLabelColor = Color(0xFF0284C7),
-                                    unfocusedLabelColor = Color(0xFF64748B),
-                                    focusedContainerColor = Color(0xFFF8FAFC),
-                                    unfocusedContainerColor = Color(0xFFF8FAFC)
-                                )
+                                placeholder = "Nhập lại mật khẩu",
+                                leadingIcon = Icons.Default.Lock,
+                                visualTransformation = PasswordVisualTransformation()
                             )
                         }
 
-                        // Error / Success message handling
-                        error?.let { Text(it, color = Color(0xFFDC2626), style = MaterialTheme.typography.bodySmall) }
-                        message?.let { Text(it, color = Color(0xFF047857), style = MaterialTheme.typography.bodySmall) }
+                        error?.let { Text(it, color = Color(0xFFFFB4AB), style = MaterialTheme.typography.bodySmall, modifier = Modifier.align(Alignment.CenterHorizontally)) }
+                        message?.let { Text(it, color = Color.White, style = MaterialTheme.typography.bodySmall, modifier = Modifier.align(Alignment.CenterHorizontally)) }
 
-                        // Main Gradient Submit Button
-                        Button(
-                            enabled = !loading,
-                            onClick = {
-                                loading = true
-                                error = null
-                                message = null
-                                scope.launch {
-                                    when (currentMode) {
-                                        AuthMode.Login -> repository.login(username, password, role)
-                                            .onSuccess(onLoggedIn)
-                                            .onFailure { error = it.message ?: "Không thể đăng nhập." }
-                                        AuthMode.Register -> repository.register(
-                                            JSONObject()
-                                                .put("tenDangNhap", username)
-                                                .put("matKhau", password)
-                                                .put("xacNhanMatKhau", confirmPassword)
-                                                .put("email", email)
-                                                .put("hoTen", fullName)
-                                                .put("soDienThoai", phone)
-                                                .put("cccd", cccd)
-                                                .put("anhCccdMatTruoc", cccdFrontUrl)
-                                                .put("anhCccdMatSau", cccdBackUrl)
-                                                .put("vaiTro", role.name)
-                                        ).onSuccess {
-                                            message = it
-                                            mode = AuthMode.Login
-                                        }.onFailure { error = it.message ?: "Không thể đăng ký." }
-                                        AuthMode.Forgot -> {
-                                            if (forgotPasswordStep == 1) {
-                                                repository.forgotPassword(email)
-                                                    .onSuccess {
-                                                        message = it
-                                                        forgotPasswordStep = 2
-                                                    }
-                                                    .onFailure { error = it.message ?: "Không thể gửi OTP." }
-                                            } else {
-                                                repository.resetPassword(email, otp, password, confirmPassword)
-                                                    .onSuccess {
-                                                        message = it
-                                                        mode = AuthMode.Login
-                                                        forgotPasswordStep = 1
-                                                    }
-                                                    .onFailure { error = it.message ?: "Không thể đặt lại mật khẩu." }
-                                            }
-                                        }
-                                        AuthMode.Reset -> {} // Unused in combined flow
-                                    }
-                                    loading = false
-                                }
-                            },
+                        Spacer(modifier = Modifier.height(8.dp))
+
+                        // Submit Button
+                        Box(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .height(52.dp)
-                                .shadow(4.dp, shape = RoundedCornerShape(26.dp)),
-                            shape = RoundedCornerShape(26.dp),
-                            colors = ButtonDefaults.buttonColors(containerColor = Color.Transparent),
-                            contentPadding = PaddingValues()
+                                .height(56.dp)
+                                .clip(PointedShape())
+                                .background(Brush.horizontalGradient(listOf(Color(0xFF0F766E), Color(0xFF0369A1))))
+                                .clickable(enabled = !loading) {
+                                    loading = true
+                                    error = null
+                                    message = null
+                                    scope.launch {
+                                        when (currentMode) {
+                                            AuthMode.Login -> repository.login(username, password, role)
+                                                .onSuccess(onLoggedIn)
+                                                .onFailure { error = it.message ?: "Không thể đăng nhập." }
+                                            AuthMode.Register -> repository.register(
+                                                JSONObject()
+                                                    .put("tenDangNhap", username)
+                                                    .put("matKhau", password)
+                                                    .put("xacNhanMatKhau", confirmPassword)
+                                                    .put("email", email)
+                                                    .put("hoTen", fullName)
+                                                    .put("soDienThoai", phone)
+                                                    .put("cccd", cccd)
+                                                    .put("anhCccdMatTruoc", cccdFrontUrl)
+                                                    .put("anhCccdMatSau", cccdBackUrl)
+                                                    .put("vaiTro", role.name)
+                                            ).onSuccess {
+                                                message = it
+                                                mode = AuthMode.Login
+                                            }.onFailure { error = it.message ?: "Không thể đăng ký." }
+                                            AuthMode.Forgot -> {
+                                                if (forgotPasswordStep == 1) {
+                                                    repository.forgotPassword(email)
+                                                        .onSuccess {
+                                                            message = it
+                                                            forgotPasswordStep = 2
+                                                        }
+                                                        .onFailure { error = it.message ?: "Không thể gửi OTP." }
+                                                } else {
+                                                    repository.resetPassword(email, otp, password, confirmPassword)
+                                                        .onSuccess {
+                                                            message = it
+                                                            mode = AuthMode.Login
+                                                            forgotPasswordStep = 1
+                                                        }
+                                                        .onFailure { error = it.message ?: "Đặt lại mật khẩu thất bại." }
+                                                }
+                                            }
+                                            AuthMode.Reset -> {} 
+                                        }
+                                        loading = false
+                                    }
+                                },
+                            contentAlignment = Alignment.Center
                         ) {
-                            Box(
-                                modifier = Modifier
-                                    .fillMaxSize()
-                                    .background(
-                                        Brush.horizontalGradient(
-                                            colors = listOf(Color(0xFF06B6D4), Color(0xFF3B82F6))
-                                        )
-                                    ),
-                                contentAlignment = Alignment.Center
+                            Text(
+                                text = (if (loading) "ĐANG XỬ LÝ..." else if (currentMode == AuthMode.Forgot && forgotPasswordStep == 1) "GỬI OTP" else if (currentMode == AuthMode.Forgot && forgotPasswordStep == 2) "ĐẶT LẠI MẬT KHẨU" else currentMode.action.uppercase()).uppercase(),
+                                color = Color.White,
+                                fontWeight = FontWeight.Bold,
+                                letterSpacing = 2.sp
+                            )
+                        }
+
+                        // Footer links
+                        if (currentMode == AuthMode.Login) {
+                            Row(
+                                modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
                             ) {
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    CompositionLocalProvider(LocalMinimumInteractiveComponentEnforcement provides false) {
+                                        Checkbox(
+                                            checked = true, 
+                                            onCheckedChange = {}, 
+                                            colors = CheckboxDefaults.colors(checkedColor = Color(0xFF0F766E), checkmarkColor = Color.White, uncheckedColor = Color.White.copy(alpha = 0.5f))
+                                        )
+                                    }
+                                    Spacer(modifier = Modifier.width(8.dp))
+                                    Text("Lưu tài khoản", color = Color.White, fontSize = 14.sp, maxLines = 1)
+                                }
                                 Text(
-                                    text = if (loading) "Đang xử lý..." else if (currentMode == AuthMode.Forgot && forgotPasswordStep == 1) "Gửi OTP" else if (currentMode == AuthMode.Forgot && forgotPasswordStep == 2) "Đặt lại mật khẩu" else currentMode.action,
-                                    color = Color.White,
-                                    fontWeight = FontWeight.Bold,
-                                    style = MaterialTheme.typography.titleMedium
+                                    "Quên mật khẩu?", 
+                                    color = Color.White, 
+                                    fontSize = 14.sp,
+                                    fontWeight = FontWeight.SemiBold,
+                                    maxLines = 1,
+                                    modifier = Modifier.clickable { mode = AuthMode.Forgot; forgotPasswordStep = 1 }
                                 )
                             }
                         }
-
-                        // Bottom Navigation Actions
-                        Column(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalAlignment = Alignment.CenterHorizontally,
-                            verticalArrangement = Arrangement.spacedBy(4.dp)
-                        ) {
+                        
+                        Box(modifier = Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
                             if (currentMode == AuthMode.Login) {
-                                Row(
-                                    modifier = Modifier.fillMaxWidth(),
-                                    horizontalArrangement = Arrangement.SpaceBetween
-                                ) {
-                                    TextButton(onClick = { 
-                                        mode = AuthMode.Forgot
-                                        forgotPasswordStep = 1
-                                        error = null
-                                        message = null
-                                    }) {
-                                        Text("Quên mật khẩu?", color = Color(0xFF3B82F6), fontWeight = FontWeight.SemiBold)
-                                    }
-                                    TextButton(onClick = { 
-                                        mode = AuthMode.Register
-                                        error = null
-                                        message = null
-                                    }) {
-                                        Text("Đăng ký ngay", color = Color(0xFF3B82F6), fontWeight = FontWeight.SemiBold)
-                                    }
-                                }
-                                
-                                // Demo session button
-                                OutlinedButton(
-                                    enabled = !loading,
-                                    onClick = {
-                                        error = null
-                                        message = "Đang dùng tài khoản mẫu trong app để kiểm thử."
-                                        onLoggedIn(repository.demoSession(role.name))
-                                    },
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .height(52.dp),
-                                    shape = RoundedCornerShape(26.dp),
-                                    border = BorderStroke(1.5.dp, Color(0xFF3B82F6)),
-                                    colors = ButtonDefaults.outlinedButtonColors(contentColor = Color(0xFF3B82F6))
-                                ) {
-                                    Text("Dùng tài khoản mẫu", fontWeight = FontWeight.Bold, style = MaterialTheme.typography.bodyMedium)
-                                }
+                                Text("Chưa có tài khoản? Đăng ký ngay", color = Color.White, fontSize = 14.sp, fontWeight = FontWeight.Bold, modifier = Modifier.clickable { mode = AuthMode.Register })
                             } else if (currentMode == AuthMode.Register) {
-                                TextButton(onClick = { 
-                                    mode = AuthMode.Login 
-                                    error = null
-                                    message = null
-                                }) {
-                                    Text("Đã có tài khoản? Đăng nhập", color = Color(0xFF3B82F6), fontWeight = FontWeight.SemiBold)
-                                }
+                                Text("Đã có tài khoản? Đăng nhập", color = Color.White, fontSize = 14.sp, fontWeight = FontWeight.Bold, modifier = Modifier.clickable { mode = AuthMode.Login })
                             } else if (currentMode == AuthMode.Forgot) {
-                                if (forgotPasswordStep == 2) {
-                                    TextButton(
-                                        onClick = {
-                                            forgotPasswordStep = 1
-                                            error = null
-                                            message = null
-                                        }
-                                    ) {
-                                        Text("Quay lại nhập email", color = Color(0xFF3B82F6), fontWeight = FontWeight.SemiBold)
-                                    }
-                                }
-                                TextButton(
-                                    onClick = {
-                                        mode = AuthMode.Login
-                                        forgotPasswordStep = 1
-                                        error = null
-                                        message = null
-                                    }
-                                ) {
-                                    Text("Quay lại đăng nhập", color = Color(0xFF64748B), fontWeight = FontWeight.Medium)
-                                }
+                                Text("Quay lại đăng nhập", color = Color.White, fontSize = 14.sp, fontWeight = FontWeight.Bold, modifier = Modifier.clickable { mode = AuthMode.Login })
                             }
                         }
                     }
                 }
+            }
+
+            // Top Hexagon Logo
+            Box(
+                modifier = Modifier
+                    .size(80.dp)
+                    .align(Alignment.TopCenter)
+                    .clip(HexagonShape())
+                    .background(Color(0xFF064E3B)) // Dark Green Hexagon
+                    .border(2.dp, Color(0xFF34D399), HexagonShape()),
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(
+                    imageVector = Icons.Default.Home,
+                    contentDescription = "App Logo",
+                    tint = Color.White,
+                    modifier = Modifier.size(40.dp)
+                )
             }
         }
     }
 }
 
 private enum class AuthMode(val label: String, val action: String) {
-    Login("Đăng nhập", "Đăng nhập"),
-    Register("Đăng ký", "Tạo tài khoản"),
+    Login("Đăng nhập", "Login"),
+    Register("Đăng ký", "Đăng ký"),
     Forgot("Quên mật khẩu", "Gửi OTP"),
-    Reset("Đặt lại", "Đặt lại mật khẩu")
+    Reset("Đặt lại", "Đặt lại")
 }
 
 private fun authTitle(mode: AuthMode, step: Int): String = when (mode) {
-    AuthMode.Login -> "Đăng nhập"
-    AuthMode.Register -> "Đăng ký tài khoản"
-    AuthMode.Forgot -> if (step == 1) "Quên mật khẩu" else "Đặt lại mật khẩu"
-    AuthMode.Reset -> "Đặt lại mật khẩu"
+    AuthMode.Login -> "Sign In"
+    AuthMode.Register -> "Sign Up"
+    AuthMode.Forgot -> if (step == 1) "Forgot Password" else "Reset Password"
+    AuthMode.Reset -> "Reset Password"
 }
