@@ -21,10 +21,11 @@ import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Phone
 import androidx.compose.material.icons.filled.Email
 import androidx.compose.material.icons.filled.Info
-import androidx.compose.material.icons.filled.Visibility
-import androidx.compose.material.icons.filled.VisibilityOff
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.*
+import androidx.compose.ui.graphics.vector.path
+import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.graphics.PathFillType
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -84,6 +85,80 @@ class HexagonShape : Shape {
         return Outline.Generic(path)
     }
 }
+
+private val VisibilityIcon: ImageVector
+    get() = ImageVector.Builder(
+        name = "Visibility",
+        defaultWidth = 24.dp,
+        defaultHeight = 24.dp,
+        viewportWidth = 24f,
+        viewportHeight = 24f
+    ).apply {
+        path(
+            fill = SolidColor(Color.Black),
+            pathFillType = PathFillType.NonZero
+        ) {
+            moveTo(12f, 4.5f)
+            curveTo(7f, 4.5f, 2.73f, 7.61f, 1f, 12f)
+            curveTo(2.73f, 16.39f, 7f, 19.5f, 12f, 19.5f)
+            curveTo(17f, 19.5f, 21.27f, 16.39f, 23f, 12f)
+            curveTo(21.27f, 7.61f, 17f, 4.5f, 12f, 4.5f)
+            close()
+            moveTo(12f, 17f)
+            curveTo(9.24f, 17f, 7f, 14.76f, 7f, 12f)
+            curveTo(7f, 9.24f, 9.24f, 7f, 12f, 7f)
+            curveTo(14.76f, 7f, 17f, 9.24f, 17f, 12f)
+            curveTo(17f, 14.76f, 14.76f, 17f, 12f, 17f)
+            close()
+            moveTo(12f, 9f)
+            curveTo(10.34f, 9f, 9f, 10.34f, 9f, 12f)
+            curveTo(9f, 13.66f, 10.34f, 15f, 12f, 15f)
+            curveTo(13.66f, 15f, 15f, 13.66f, 15f, 12f)
+            curveTo(15f, 10.34f, 13.66f, 9f, 12f, 9f)
+            close()
+        }
+    }.build()
+
+private val VisibilityOffIcon: ImageVector
+    get() = ImageVector.Builder(
+        name = "VisibilityOff",
+        defaultWidth = 24.dp,
+        defaultHeight = 24.dp,
+        viewportWidth = 24f,
+        viewportHeight = 24f
+    ).apply {
+        path(
+            fill = SolidColor(Color.Black),
+            pathFillType = PathFillType.NonZero
+        ) {
+            moveTo(12f, 7f)
+            curveTo(14.76f, 7f, 17f, 9.24f, 17f, 12f)
+            curveTo(17f, 12.71f, 16.85f, 13.38f, 16.58f, 13.99f)
+            lineTo(19.26f, 16.67f)
+            curveTo(20.59f, 15.39f, 21.96f, 13.82f, 23f, 12f)
+            curveTo(21.27f, 7.61f, 17f, 4.5f, 12f, 4.5f)
+            curveTo(10.29f, 4.5f, 8.66f, 4.9f, 7.18f, 5.58f)
+            lineTo(9.44f, 7.84f)
+            curveTo(10.23f, 7.3f, 11.08f, 7f, 12f, 7f)
+            close()
+            moveTo(2.71f, 3.16f)
+            lineTo(1.29f, 4.57f)
+            lineTo(3.43f, 6.71f)
+            curveTo(2.32f, 8.23f, 1.48f, 10.03f, 1f, 12f)
+            curveTo(2.73f, 16.39f, 7f, 19.5f, 12f, 19.5f)
+            curveTo(13.6f, 19.5f, 15.13f, 19.16f, 16.53f, 18.57f)
+            lineTo(19.43f, 21.47f)
+            lineTo(20.84f, 20.06f)
+            lineTo(2.71f, 3.16f)
+            close()
+            moveTo(12f, 17f)
+            curveTo(9.24f, 17f, 7f, 14.76f, 7f, 12f)
+            curveTo(7f, 11.23f, 7.17f, 10.51f, 7.48f, 9.87f)
+            lineTo(14.07f, 16.46f)
+            curveTo(13.44f, 16.8f, 12.75f, 17f, 12f, 17f)
+            close()
+        }
+    }.build()
 
 @Composable
 fun HexTextField(
@@ -369,7 +444,7 @@ internal fun LoginScreen(repository: RentalRepository, onLoggedIn: (UserSession)
                                 visualTransformation = if (passwordVisible) VisualTransformation.None else PasswordVisualTransformation(),
                                 trailingIcon = {
                                     Icon(
-                                        imageVector = if (passwordVisible) Icons.Default.Visibility else Icons.Default.VisibilityOff,
+                                        imageVector = if (passwordVisible) VisibilityIcon else VisibilityOffIcon,
                                         contentDescription = if (passwordVisible) "Ẩn mật khẩu" else "Hiện mật khẩu",
                                         tint = Color(0xFF334155),
                                         modifier = Modifier.size(24.dp).clickable { passwordVisible = !passwordVisible }
@@ -466,14 +541,11 @@ internal fun LoginScreen(repository: RentalRepository, onLoggedIn: (UserSession)
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
                                 Row(verticalAlignment = Alignment.CenterVertically) {
-                                    CompositionLocalProvider(LocalMinimumInteractiveComponentEnforcement provides false) {
-                                        Checkbox(
-                                            checked = true, 
-                                            onCheckedChange = {}, 
-                                            colors = CheckboxDefaults.colors(checkedColor = Color(0xFF0F766E), checkmarkColor = Color.White, uncheckedColor = Color.White.copy(alpha = 0.5f))
-                                        )
-                                    }
-                                    Spacer(modifier = Modifier.width(8.dp))
+                                    Checkbox(
+                                        checked = true, 
+                                        onCheckedChange = {}, 
+                                        colors = CheckboxDefaults.colors(checkedColor = Color(0xFF0F766E), checkmarkColor = Color.White, uncheckedColor = Color.White.copy(alpha = 0.5f))
+                                    )
                                     Text("Lưu tài khoản", color = Color.White, fontSize = 14.sp, maxLines = 1)
                                 }
                                 Text(
