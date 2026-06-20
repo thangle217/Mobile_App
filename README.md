@@ -30,8 +30,45 @@ app/src/main/java/com/example/myapplication/
 │
 └── ui/
     ├── app/                 # Main App UI flow, Dialogs, and Screens (AuthScreens, DashboardScreen)
-    └── theme/               # Color, Typography, and Theme specifications
+    │   ├── SplashScreen.kt           # Animated launch screen
+    │   ├── SearchBar.kt              # Reusable search input
+    │   ├── FilterTabRow.kt           # Pill-style horizontal filter tabs
+    │   ├── StatusBadges.kt           # Room & contract status chips
+    │   ├── MetricSummaryCard.kt      # Dashboard KPI cards
+    │   ├── EmptyStatePlaceholder.kt  # Empty list state UI
+    │   ├── ShimmerComponents.kt      # Skeleton loading animations
+    │   ├── AppSnackbar.kt            # Custom in-app notifications
+    │   ├── TenantAvatar.kt           # Initials avatar with HSL colors
+    │   ├── GradientHeaderBanner.kt   # Gradient banner for detail pages
+    │   ├── OccupancyRingIndicator.kt # Animated circular progress
+    │   └── ConfirmationBottomSheet.kt# Destructive action confirmation
+    └── theme/               # Color, Typography, Spacing, Shape, and Theme specifications
+        ├── Color.kt
+        ├── Type.kt
+        ├── Theme.kt
+        ├── Spacing.kt        # 4dp grid spacing tokens
+        └── Shape.kt          # Corner radius tokens
 ```
+
+## UI Component Library
+
+The `feature/ui-improvements` branch introduces a rich set of reusable UI components:
+
+| Component | Description |
+|---|---|
+| `SplashScreen` | Animated launch screen with fade + scale |
+| `SearchBar` | M3 outlined search input |
+| `FilterTabRow` | Pill-style scrollable filter tabs |
+| `RoomStatusBadge` | Occupied / Vacant / Maintenance chip |
+| `ContractStatusBadge` | Active / Expired / Pending / Terminated chip |
+| `MetricSummaryCard` | Dashboard KPI card with gradient container |
+| `EmptyStatePlaceholder` | Empty state with icon, title, and optional CTA |
+| `ShimmerBox / ShimmerListItemCard` | Skeleton loading animations |
+| `AppSnackbar` | Animated SUCCESS / ERROR / WARNING / INFO snackbar |
+| `TenantAvatar` | Initials avatar with deterministic HSL color |
+| `GradientHeaderBanner` | Gradient header for detail screens |
+| `OccupancyRingIndicator` | Animated circular occupancy gauge |
+| `ConfirmationBottomSheet` | Bottom sheet for destructive actions |
 
 ## Getting Started
 
