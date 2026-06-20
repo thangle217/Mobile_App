@@ -12,12 +12,13 @@ class CloudDataSource {
     private val auth = Firebase.auth
 
     suspend fun login(usernameOrEmail: String, password: String, role: UserRole): UserSession {
+        val inputStr = usernameOrEmail.trim()
         val usersRef = db.collection("users")
-        val query = usersRef.whereEqualTo("username", usernameOrEmail).get().await()
+        val query = usersRef.whereEqualTo("username", inputStr).get().await()
         val emailToLogin = if (!query.isEmpty) {
-            query.documents.first().getString("email") ?: usernameOrEmail
+            query.documents.first().getString("email") ?: inputStr
         } else {
-            usernameOrEmail
+            inputStr
         }
 
         val authResult = auth.signInWithEmailAndPassword(emailToLogin, password).await()

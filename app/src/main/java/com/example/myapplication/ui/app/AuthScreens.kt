@@ -544,7 +544,8 @@ internal fun LoginScreen(repository: RentalRepository, onLoggedIn: (UserSession)
                                     Checkbox(
                                         checked = true, 
                                         onCheckedChange = {}, 
-                                        colors = CheckboxDefaults.colors(checkedColor = Color(0xFF0F766E), checkmarkColor = Color.White, uncheckedColor = Color.White.copy(alpha = 0.5f))
+                                        colors = CheckboxDefaults.colors(checkedColor = Color(0xFF0F766E), checkmarkColor = Color.White, uncheckedColor = Color.White.copy(alpha = 0.5f)),
+                                        modifier = Modifier.padding(end = 4.dp).offset(x = (-8).dp)
                                     )
                                     Text("Lưu tài khoản", color = Color.White, fontSize = 14.sp, maxLines = 1)
                                 }
