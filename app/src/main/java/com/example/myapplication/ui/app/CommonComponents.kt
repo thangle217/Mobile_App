@@ -6,6 +6,8 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Home
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
@@ -256,11 +258,16 @@ internal fun AppLogo(size: Int) {
         modifier = Modifier
             .size(size.dp)
             .clip(RoundedCornerShape(12.dp))
-            .background(Brush.linearGradient(listOf(Color(0xFF4F46E5), Color(0xFF06B6D4))))
+            .background(Brush.linearGradient(listOf(Color(0xFF06B6D4), Color(0xFF3B82F6))))
             .border(1.dp, Color.White.copy(alpha = 0.2f), RoundedCornerShape(12.dp)),
         contentAlignment = Alignment.Center
     ) {
-        Text("RT", color = Color.White, fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleMedium)
+        Icon(
+            imageVector = Icons.Default.Home,
+            contentDescription = "Home Logo",
+            tint = Color.White,
+            modifier = Modifier.size((size * 0.55f).dp)
+        )
     }
 }
 
