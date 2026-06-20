@@ -3,15 +3,22 @@ package com.example.myapplication.ui.app
 import android.net.Uri
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.lazy.LazyRow
-import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Home
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
@@ -43,6 +50,7 @@ internal fun LoginScreen(repository: RentalRepository, onLoggedIn: (UserSession)
     var loading by remember { mutableStateOf(false) }
     var error by remember { mutableStateOf<String?>(null) }
     var message by remember { mutableStateOf<String?>(null) }
+    var forgotPasswordStep by remember { mutableStateOf(1) }
 
     fun uploadFromUri(uri: Uri, onDone: (String) -> Unit) {
         loading = true
@@ -85,31 +93,39 @@ internal fun LoginScreen(repository: RentalRepository, onLoggedIn: (UserSession)
         modifier = Modifier
             .fillMaxSize()
             .background(
-                Brush.verticalGradient(
-                    colors = listOf(Color(0xFF4F46E5), Color(0xFF6D28D9), Color(0xFF1E1B4B)) // Vibrant premium dark indigo/violet background
+                Brush.linearGradient(
+                    colors = listOf(Color(0xFFE0F2FE), Color(0xFFF1F5F9), Color(0xFFFAE8FF))
                 )
             )
-            .padding(20.dp),
+            .padding(16.dp),
         contentAlignment = Alignment.Center
     ) {
         Card(
-            modifier = Modifier.fillMaxWidth(),
-            shape = RoundedCornerShape(16.dp),
-            colors = CardDefaults.cardColors(containerColor = Color.White.copy(alpha = 0.98f)),
-            elevation = CardDefaults.cardElevation(defaultElevation = 12.dp)
+            modifier = Modifier
+                .fillMaxWidth()
+                .shadow(8.dp, shape = RoundedCornerShape(24.dp)),
+            shape = RoundedCornerShape(24.dp),
+            colors = CardDefaults.cardColors(containerColor = Color.White.copy(alpha = 0.95f))
         ) {
-            Column(modifier = Modifier.padding(24.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
+            Column(
+                modifier = Modifier
+                    .padding(24.dp)
+                    .verticalScroll(rememberScrollState()),
+                verticalArrangement = Arrangement.spacedBy(16.dp)
+            ) {
+                // Header Logo and App Title
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(12.dp)
+                    horizontalArrangement = Arrangement.spacedBy(12.dp),
+                    modifier = Modifier.padding(bottom = 8.dp)
                 ) {
                     AppLogo(size = 48)
                     Column {
                         Text(
-                            text = "Antigravity Rental",
+                            text = "Rental Management",
                             style = MaterialTheme.typography.titleMedium,
                             fontWeight = FontWeight.ExtraBold,
-                            color = Color(0xFF1E1B4B)
+                            color = Color(0xFF1E293B)
                         )
                         Text(
                             text = "Hệ Thống Quản Lý Nhà Trọ",
@@ -118,45 +134,91 @@ internal fun LoginScreen(repository: RentalRepository, onLoggedIn: (UserSession)
                         )
                     }
                 }
-                
-                Divider(color = Color(0xFFF1F5F9))
 
+                Divider(color = Color(0xFFE2E8F0))
+
+                // Page Title (Without the subtitle description below it)
                 Text(
-                    text = authTitle(mode),
+                    text = authTitle(mode, forgotPasswordStep),
                     style = MaterialTheme.typography.headlineSmall,
                     fontWeight = FontWeight.Bold,
-                    color = Color(0xFF1E1B4B)
-                )
-                Text(
-                    text = authSubtitle(mode),
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = Color(0xFF64748B)
+                    color = Color(0xFF0F172A),
+                    modifier = Modifier.padding(vertical = 4.dp)
                 )
 
-                LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    items(listOf(AuthMode.Login, AuthMode.Register, AuthMode.Forgot, AuthMode.Reset)) { item ->
-                        FilterChip(
-                            selected = mode == item,
-                            onClick = { mode = item; error = null; message = null },
-                            label = { Text(item.label) },
-                            shape = RoundedCornerShape(8.dp)
-                        )
-                    }
-                }
-
-                if (mode == AuthMode.Login || mode == AuthMode.Register) {
-                    LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        items(if (mode == AuthMode.Register) listOf(UserRole.ChuTro, UserRole.NguoiDung) else UserRole.entries) { item ->
-                            FilterChip(
-                                selected = role == item,
-                                onClick = { selectRole(item) },
-                                label = { Text(item.label) },
-                                shape = RoundedCornerShape(8.dp)
+                // Custom segmented tab controller for AuthMode
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .background(Color(0xFFF1F5F9), RoundedCornerShape(12.dp))
+                        .padding(4.dp),
+                    horizontalArrangement = Arrangement.spacedBy(4.dp)
+                ) {
+                    listOf(AuthMode.Login, AuthMode.Register, AuthMode.Forgot).forEach { item ->
+                        val selected = mode == item
+                        Box(
+                            modifier = Modifier
+                                .weight(1f)
+                                .clip(RoundedCornerShape(8.dp))
+                                .background(if (selected) Color.White else Color.Transparent)
+                                .clickable {
+                                    mode = item
+                                    forgotPasswordStep = 1
+                                    error = null
+                                    message = null
+                                }
+                                .padding(vertical = 10.dp),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Text(
+                                text = item.label,
+                                color = if (selected) Color(0xFF0F172A) else Color(0xFF64748B),
+                                fontWeight = if (selected) FontWeight.Bold else FontWeight.Medium,
+                                style = MaterialTheme.typography.bodyMedium
                             )
                         }
                     }
                 }
 
+                // Custom segmented control for UserRole
+                if (mode == AuthMode.Login || mode == AuthMode.Register) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .background(Color(0xFFF8FAFC), RoundedCornerShape(12.dp))
+                            .border(1.dp, Color(0xFFE2E8F0), RoundedCornerShape(12.dp))
+                            .padding(4.dp),
+                        horizontalArrangement = Arrangement.spacedBy(4.dp)
+                    ) {
+                        val roles = if (mode == AuthMode.Register) listOf(UserRole.ChuTro, UserRole.NguoiDung) else UserRole.entries
+                        roles.forEach { item ->
+                            val selected = role == item
+                            Box(
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .clip(RoundedCornerShape(8.dp))
+                                    .background(if (selected) Color(0xFF0284C7).copy(alpha = 0.08f) else Color.Transparent)
+                                    .border(
+                                        1.dp,
+                                        if (selected) Color(0xFF0284C7) else Color.Transparent,
+                                        RoundedCornerShape(8.dp)
+                                    )
+                                    .clickable { selectRole(item) }
+                                    .padding(vertical = 8.dp),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Text(
+                                    text = item.label,
+                                    color = if (selected) Color(0xFF0284C7) else Color(0xFF64748B),
+                                    fontWeight = if (selected) FontWeight.Bold else FontWeight.Medium,
+                                    style = MaterialTheme.typography.bodySmall
+                                )
+                            }
+                        }
+                    }
+                }
+
+                // Input fields
                 if (mode == AuthMode.Login || mode == AuthMode.Register) {
                     OutlinedTextField(
                         value = username,
@@ -164,7 +226,15 @@ internal fun LoginScreen(repository: RentalRepository, onLoggedIn: (UserSession)
                         label = { Text("Tên đăng nhập hoặc email") },
                         modifier = Modifier.fillMaxWidth(),
                         singleLine = true,
-                        shape = RoundedCornerShape(8.dp)
+                        shape = RoundedCornerShape(12.dp),
+                        colors = OutlinedTextFieldDefaults.colors(
+                            focusedBorderColor = Color(0xFF0284C7),
+                            unfocusedBorderColor = Color(0xFFCBD5E1),
+                            focusedLabelColor = Color(0xFF0284C7),
+                            unfocusedLabelColor = Color(0xFF64748B),
+                            focusedContainerColor = Color(0xFFF8FAFC),
+                            unfocusedContainerColor = Color(0xFFF8FAFC)
+                        )
                     )
                 }
 
@@ -175,7 +245,15 @@ internal fun LoginScreen(repository: RentalRepository, onLoggedIn: (UserSession)
                         label = { Text("Họ tên") },
                         modifier = Modifier.fillMaxWidth(),
                         singleLine = true,
-                        shape = RoundedCornerShape(8.dp)
+                        shape = RoundedCornerShape(12.dp),
+                        colors = OutlinedTextFieldDefaults.colors(
+                            focusedBorderColor = Color(0xFF0284C7),
+                            unfocusedBorderColor = Color(0xFFCBD5E1),
+                            focusedLabelColor = Color(0xFF0284C7),
+                            unfocusedLabelColor = Color(0xFF64748B),
+                            focusedContainerColor = Color(0xFFF8FAFC),
+                            unfocusedContainerColor = Color(0xFFF8FAFC)
+                        )
                     )
                     OutlinedTextField(
                         value = email,
@@ -183,7 +261,15 @@ internal fun LoginScreen(repository: RentalRepository, onLoggedIn: (UserSession)
                         label = { Text("Email") },
                         modifier = Modifier.fillMaxWidth(),
                         singleLine = true,
-                        shape = RoundedCornerShape(8.dp)
+                        shape = RoundedCornerShape(12.dp),
+                        colors = OutlinedTextFieldDefaults.colors(
+                            focusedBorderColor = Color(0xFF0284C7),
+                            unfocusedBorderColor = Color(0xFFCBD5E1),
+                            focusedLabelColor = Color(0xFF0284C7),
+                            unfocusedLabelColor = Color(0xFF64748B),
+                            focusedContainerColor = Color(0xFFF8FAFC),
+                            unfocusedContainerColor = Color(0xFFF8FAFC)
+                        )
                     )
                     OutlinedTextField(
                         value = phone,
@@ -191,7 +277,15 @@ internal fun LoginScreen(repository: RentalRepository, onLoggedIn: (UserSession)
                         label = { Text("Số điện thoại") },
                         modifier = Modifier.fillMaxWidth(),
                         singleLine = true,
-                        shape = RoundedCornerShape(8.dp)
+                        shape = RoundedCornerShape(12.dp),
+                        colors = OutlinedTextFieldDefaults.colors(
+                            focusedBorderColor = Color(0xFF0284C7),
+                            unfocusedBorderColor = Color(0xFFCBD5E1),
+                            focusedLabelColor = Color(0xFF0284C7),
+                            unfocusedLabelColor = Color(0xFF64748B),
+                            focusedContainerColor = Color(0xFFF8FAFC),
+                            unfocusedContainerColor = Color(0xFFF8FAFC)
+                        )
                     )
                     if (role == UserRole.NguoiDung) {
                         OutlinedTextField(
@@ -200,58 +294,93 @@ internal fun LoginScreen(repository: RentalRepository, onLoggedIn: (UserSession)
                             label = { Text("CCCD/CMND") },
                             modifier = Modifier.fillMaxWidth(),
                             singleLine = true,
-                            shape = RoundedCornerShape(8.dp)
+                            shape = RoundedCornerShape(12.dp),
+                            colors = OutlinedTextFieldDefaults.colors(
+                                focusedBorderColor = Color(0xFF0284C7),
+                                unfocusedBorderColor = Color(0xFFCBD5E1),
+                                focusedLabelColor = Color(0xFF0284C7),
+                                unfocusedLabelColor = Color(0xFF64748B),
+                                focusedContainerColor = Color(0xFFF8FAFC),
+                                unfocusedContainerColor = Color(0xFFF8FAFC)
+                            )
                         )
                         Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
                             OutlinedButton(
                                 onClick = { frontPicker.launch("image/*") },
                                 modifier = Modifier.weight(1f),
-                                shape = RoundedCornerShape(8.dp)
-                            ) { Text(if (cccdFrontUrl.isBlank()) "Ảnh CCCD Trước" else "Đã chọn mặt trước") }
+                                shape = RoundedCornerShape(12.dp),
+                                border = BorderStroke(1.dp, Color(0xFF0284C7))
+                            ) { Text(if (cccdFrontUrl.isBlank()) "CCCD Mặt Trước" else "Đã chọn mặt trước", style = MaterialTheme.typography.bodySmall, maxLines = 1) }
                             OutlinedButton(
                                 onClick = { backPicker.launch("image/*") },
                                 modifier = Modifier.weight(1f),
-                                shape = RoundedCornerShape(8.dp)
-                            ) { Text(if (cccdBackUrl.isBlank()) "Ảnh CCCD Sau" else "Đã chọn mặt sau") }
+                                shape = RoundedCornerShape(12.dp),
+                                border = BorderStroke(1.dp, Color(0xFF0284C7))
+                            ) { Text(if (cccdBackUrl.isBlank()) "CCCD Mặt Sau" else "Đã chọn mặt sau", style = MaterialTheme.typography.bodySmall, maxLines = 1) }
                         }
                     }
                 }
 
-                if (mode == AuthMode.Forgot || mode == AuthMode.Reset) {
+                if (mode == AuthMode.Forgot) {
                     OutlinedTextField(
                         value = email,
                         onValueChange = { email = it },
-                        label = { Text("Email nhận OTP") },
+                        enabled = forgotPasswordStep == 1,
+                        label = { Text("Email đã đăng ký") },
                         modifier = Modifier.fillMaxWidth(),
                         singleLine = true,
-                        shape = RoundedCornerShape(8.dp)
+                        shape = RoundedCornerShape(12.dp),
+                        colors = OutlinedTextFieldDefaults.colors(
+                            focusedBorderColor = Color(0xFF0284C7),
+                            unfocusedBorderColor = Color(0xFFCBD5E1),
+                            focusedLabelColor = Color(0xFF0284C7),
+                            unfocusedLabelColor = Color(0xFF64748B),
+                            focusedContainerColor = Color(0xFFF8FAFC),
+                            unfocusedContainerColor = Color(0xFFF8FAFC)
+                        )
                     )
                 }
 
-                if (mode == AuthMode.Reset) {
+                if (mode == AuthMode.Forgot && forgotPasswordStep == 2) {
                     OutlinedTextField(
                         value = otp,
                         onValueChange = { otp = it },
-                        label = { Text("Mã OTP/Token") },
+                        label = { Text("Mã OTP/Token (nhập 123456)") },
                         modifier = Modifier.fillMaxWidth(),
                         singleLine = true,
-                        shape = RoundedCornerShape(8.dp)
+                        shape = RoundedCornerShape(12.dp),
+                        colors = OutlinedTextFieldDefaults.colors(
+                            focusedBorderColor = Color(0xFF0284C7),
+                            unfocusedBorderColor = Color(0xFFCBD5E1),
+                            focusedLabelColor = Color(0xFF0284C7),
+                            unfocusedLabelColor = Color(0xFF64748B),
+                            focusedContainerColor = Color(0xFFF8FAFC),
+                            unfocusedContainerColor = Color(0xFFF8FAFC)
+                        )
                     )
                 }
 
-                if (mode != AuthMode.Forgot) {
+                if (mode != AuthMode.Forgot || forgotPasswordStep == 2) {
                     OutlinedTextField(
                         value = password,
                         onValueChange = { password = it },
-                        label = { Text(if (mode == AuthMode.Reset) "Mật khẩu mới" else "Mật khẩu") },
+                        label = { Text(if (mode == AuthMode.Forgot) "Mật khẩu mới" else "Mật khẩu") },
                         visualTransformation = PasswordVisualTransformation(),
                         modifier = Modifier.fillMaxWidth(),
                         singleLine = true,
-                        shape = RoundedCornerShape(8.dp)
+                        shape = RoundedCornerShape(12.dp),
+                        colors = OutlinedTextFieldDefaults.colors(
+                            focusedBorderColor = Color(0xFF0284C7),
+                            unfocusedBorderColor = Color(0xFFCBD5E1),
+                            focusedLabelColor = Color(0xFF0284C7),
+                            unfocusedLabelColor = Color(0xFF64748B),
+                            focusedContainerColor = Color(0xFFF8FAFC),
+                            unfocusedContainerColor = Color(0xFFF8FAFC)
+                        )
                     )
                 }
 
-                if (mode == AuthMode.Register || mode == AuthMode.Reset) {
+                if (mode == AuthMode.Register || (mode == AuthMode.Forgot && forgotPasswordStep == 2)) {
                     OutlinedTextField(
                         value = confirmPassword,
                         onValueChange = { confirmPassword = it },
@@ -259,13 +388,23 @@ internal fun LoginScreen(repository: RentalRepository, onLoggedIn: (UserSession)
                         visualTransformation = PasswordVisualTransformation(),
                         modifier = Modifier.fillMaxWidth(),
                         singleLine = true,
-                        shape = RoundedCornerShape(8.dp)
+                        shape = RoundedCornerShape(12.dp),
+                        colors = OutlinedTextFieldDefaults.colors(
+                            focusedBorderColor = Color(0xFF0284C7),
+                            unfocusedBorderColor = Color(0xFFCBD5E1),
+                            focusedLabelColor = Color(0xFF0284C7),
+                            unfocusedLabelColor = Color(0xFF64748B),
+                            focusedContainerColor = Color(0xFFF8FAFC),
+                            unfocusedContainerColor = Color(0xFFF8FAFC)
+                        )
                     )
                 }
 
+                // Error / Success message handling
                 error?.let { Text(it, color = Color(0xFFDC2626), style = MaterialTheme.typography.bodySmall) }
                 message?.let { Text(it, color = Color(0xFF047857), style = MaterialTheme.typography.bodySmall) }
 
+                // Main Gradient Submit Button
                 Button(
                     enabled = !loading,
                     onClick = {
@@ -293,23 +432,57 @@ internal fun LoginScreen(repository: RentalRepository, onLoggedIn: (UserSession)
                                     message = it
                                     mode = AuthMode.Login
                                 }.onFailure { error = it.message ?: "Không thể đăng ký." }
-                                AuthMode.Forgot -> repository.forgotPassword(email)
-                                    .onSuccess { message = it; mode = AuthMode.Reset }
-                                    .onFailure { error = it.message ?: "Không thể gửi OTP." }
-                                AuthMode.Reset -> repository.resetPassword(email, otp, password, confirmPassword)
-                                    .onSuccess { message = it; mode = AuthMode.Login }
-                                    .onFailure { error = it.message ?: "Không thể đặt lại mật khẩu." }
+                                AuthMode.Forgot -> {
+                                    if (forgotPasswordStep == 1) {
+                                        repository.forgotPassword(email)
+                                            .onSuccess {
+                                                message = it
+                                                forgotPasswordStep = 2
+                                            }
+                                            .onFailure { error = it.message ?: "Không thể gửi OTP." }
+                                    } else {
+                                        repository.resetPassword(email, otp, password, confirmPassword)
+                                            .onSuccess {
+                                                message = it
+                                                mode = AuthMode.Login
+                                                forgotPasswordStep = 1
+                                            }
+                                            .onFailure { error = it.message ?: "Không thể đặt lại mật khẩu." }
+                                    }
+                                }
+                                AuthMode.Reset -> {} // Unused in combined flow
                             }
                             loading = false
                         }
                     },
-                    modifier = Modifier.fillMaxWidth().height(50.dp),
-                    shape = RoundedCornerShape(12.dp),
-                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF4F46E5))
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(52.dp)
+                        .shadow(4.dp, shape = RoundedCornerShape(26.dp)),
+                    shape = RoundedCornerShape(26.dp),
+                    colors = ButtonDefaults.buttonColors(containerColor = Color.Transparent),
+                    contentPadding = PaddingValues()
                 ) {
-                    Text(if (loading) "Đang xử lý..." else mode.action, fontWeight = FontWeight.Bold)
+                    Box(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .background(
+                                Brush.horizontalGradient(
+                                    colors = listOf(Color(0xFF06B6D4), Color(0xFF3B82F6))
+                                )
+                            ),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text(
+                            text = if (loading) "Đang xử lý..." else if (mode == AuthMode.Forgot && forgotPasswordStep == 1) "Gửi OTP" else if (mode == AuthMode.Forgot && forgotPasswordStep == 2) "Đặt lại mật khẩu" else mode.action,
+                            color = Color.White,
+                            fontWeight = FontWeight.Bold,
+                            style = MaterialTheme.typography.titleMedium
+                        )
+                    }
                 }
 
+                // Demo session button (Only shows during Login)
                 if (mode == AuthMode.Login) {
                     OutlinedButton(
                         enabled = !loading,
@@ -318,10 +491,28 @@ internal fun LoginScreen(repository: RentalRepository, onLoggedIn: (UserSession)
                             message = "Đang dùng tài khoản mẫu trong app để kiểm thử."
                             onLoggedIn(repository.demoSession(role.name))
                         },
-                        modifier = Modifier.fillMaxWidth().height(50.dp),
-                        shape = RoundedCornerShape(12.dp)
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(52.dp),
+                        shape = RoundedCornerShape(26.dp),
+                        border = BorderStroke(1.5.dp, Color(0xFF3B82F6)),
+                        colors = ButtonDefaults.outlinedButtonColors(contentColor = Color(0xFF3B82F6))
                     ) {
-                        Text("Dùng tài khoản mẫu", fontWeight = FontWeight.SemiBold)
+                        Text("Dùng tài khoản mẫu", fontWeight = FontWeight.Bold, style = MaterialTheme.typography.bodyMedium)
+                    }
+                }
+
+                // Option to go back to email entry step during Reset process
+                if (mode == AuthMode.Forgot && forgotPasswordStep == 2) {
+                    TextButton(
+                        onClick = {
+                            forgotPasswordStep = 1
+                            error = null
+                            message = null
+                        },
+                        modifier = Modifier.align(Alignment.CenterHorizontally)
+                    ) {
+                        Text("Quay lại nhập email", color = Color(0xFF3B82F6), fontWeight = FontWeight.SemiBold)
                     }
                 }
             }
@@ -336,16 +527,9 @@ private enum class AuthMode(val label: String, val action: String) {
     Reset("Đặt lại", "Đặt lại mật khẩu")
 }
 
-private fun authTitle(mode: AuthMode): String = when (mode) {
+private fun authTitle(mode: AuthMode, step: Int): String = when (mode) {
     AuthMode.Login -> "Đăng nhập"
     AuthMode.Register -> "Đăng ký tài khoản"
-    AuthMode.Forgot -> "Quên mật khẩu"
+    AuthMode.Forgot -> if (step == 1) "Quên mật khẩu" else "Đặt lại mật khẩu"
     AuthMode.Reset -> "Đặt lại mật khẩu"
-}
-
-private fun authSubtitle(mode: AuthMode): String = when (mode) {
-    AuthMode.Login -> "Đăng nhập bằng tài khoản đã lưu trong app hoặc tài khoản mẫu."
-    AuthMode.Register -> "Tạo tài khoản Chủ trọ hoặc Người thuê và dùng ngay trong app."
-    AuthMode.Forgot -> "Nhập email để lấy mã đặt lại mật khẩu trong bản local."
-    AuthMode.Reset -> "Nhập mã 123456 hoặc mã đã được cấp và mật khẩu mới."
 }
