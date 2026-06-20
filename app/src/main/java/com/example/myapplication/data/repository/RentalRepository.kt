@@ -1,7 +1,7 @@
 package com.example.myapplication.data.repository
 
 import android.content.Context
-import com.example.myapplication.data.local.LocalAppStore
+import com.example.myapplication.data.remote.CloudDataSource
 import com.example.myapplication.domain.model.AccountProfile
 import com.example.myapplication.domain.model.AppScreen
 import com.example.myapplication.domain.model.DashboardSummary
@@ -13,7 +13,7 @@ import com.example.myapplication.domain.model.UserSession
 import org.json.JSONObject
 
 class RentalRepository(context: Context) : IRentalRepository {
-    private val store = LocalAppStore(context.applicationContext)
+    private val store = CloudDataSource()
 
     override suspend fun login(username: String, password: String, role: UserRole): Result<UserSession> = runCatching {
         store.login(username, password, role)
@@ -70,6 +70,7 @@ class RentalRepository(context: Context) : IRentalRepository {
             item
         }
         store.upsert(screen, finalItem.copy(id = id))
+        finalItem.copy(id = id)
     }
 
     private fun validateItemForScreen(screen: AppScreen, item: RentalItem) {
@@ -242,7 +243,7 @@ class RentalRepository(context: Context) : IRentalRepository {
             UserRole.NguoiDung -> "nguoithue"
         }
         val password = if (role == UserRole.Admin) "Admin123" else "123456"
-        return store.login(username, password, role)
+        return UserSession(token = "dummy", role = role, displayName = username, username = username)
     }
 
     private fun canManage(role: UserRole?, screen: AppScreen): Boolean = when (role) {
