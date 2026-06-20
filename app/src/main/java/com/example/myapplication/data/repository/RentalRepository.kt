@@ -23,6 +23,10 @@ class RentalRepository(context: Context) : IRentalRepository {
         store.register(payload)
     }
 
+    suspend fun createTestAccounts(): Result<String> = runCatching {
+        store.createTestAccounts()
+    }
+
     override suspend fun forgotPassword(email: String): Result<String> = runCatching {
         store.forgotPassword(email)
     }

@@ -1,5 +1,6 @@
 package com.example.myapplication.ui.app
 
+import androidx.compose.ui.text.style.TextDecoration
 import android.net.Uri
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -561,12 +562,21 @@ internal fun LoginScreen(repository: RentalRepository, onLoggedIn: (UserSession)
                         }
                         
                         Box(modifier = Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
-                            if (currentMode == AuthMode.Login) {
-                                Text("Chưa có tài khoản? Đăng ký ngay", color = Color.White, fontSize = 14.sp, fontWeight = FontWeight.Bold, modifier = Modifier.clickable { mode = AuthMode.Register })
-                            } else if (currentMode == AuthMode.Register) {
-                                Text("Đã có tài khoản? Đăng nhập", color = Color.White, fontSize = 14.sp, fontWeight = FontWeight.Bold, modifier = Modifier.clickable { mode = AuthMode.Login })
-                            } else if (currentMode == AuthMode.Forgot) {
-                                Text("Quay lại đăng nhập", color = Color.White, fontSize = 14.sp, fontWeight = FontWeight.Bold, modifier = Modifier.clickable { mode = AuthMode.Login })
+                            Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                                if (currentMode == AuthMode.Login) {
+                                    Text("Chưa có tài khoản? Đăng ký ngay", color = Color.White, fontSize = 14.sp, fontWeight = FontWeight.Bold, modifier = Modifier.clickable { mode = AuthMode.Register })
+                                    Text("Khởi tạo tài khoản mẫu (Dành cho Dev)", color = Color(0xFF94A3B8), fontSize = 12.sp, textDecoration = TextDecoration.Underline, modifier = Modifier.clickable {
+                                        loading = true
+                                        scope.launch {
+                                            repository.createTestAccounts().onSuccess { message = it }.onFailure { error = it.message }
+                                            loading = false
+                                        }
+                                    })
+                                } else if (currentMode == AuthMode.Register) {
+                                    Text("Đã có tài khoản? Đăng nhập", color = Color.White, fontSize = 14.sp, fontWeight = FontWeight.Bold, modifier = Modifier.clickable { mode = AuthMode.Login })
+                                } else if (currentMode == AuthMode.Forgot) {
+                                    Text("Quay lại đăng nhập", color = Color.White, fontSize = 14.sp, fontWeight = FontWeight.Bold, modifier = Modifier.clickable { mode = AuthMode.Login })
+                                }
                             }
                         }
                     }

@@ -88,6 +88,62 @@ class CloudDataSource {
         error("Vui lòng dùng link trong email để đặt lại mật khẩu.")
     }
 
+    suspend fun createTestAccounts(): String {
+        val testAccounts = listOf(
+            mapOf("username" to "Admin", "password" to "Admin123", "email" to "admin@quanlynhatro.com", "role" to UserRole.Admin),
+            mapOf("username" to "chutro", "password" to "123456", "email" to "chutro@quanlynhatro.com", "role" to UserRole.ChuTro),
+            mapOf("username" to "nguoithue", "password" to "123456", "email" to "nguoithue@quanlynhatro.com", "role" to UserRole.NguoiDung)
+        )
+        
+        var createdCount = 0
+        for (acc in testAccounts) {
+            val username = acc["username"] as String
+            val password = acc["password"] as String
+            val email = acc["email"] as String
+            val role = acc["role"] as UserRole
+            
+            val query = db.collection("users").whereEqualTo("username", username).get().await()
+            if (query.isEmpty) {
+                try {
+                    var uid: String? = null
+                    try {
+                        val authResult = auth.createUserWithEmailAndPassword(email, password).await()
+                        uid = authResult.user?.uid
+                    } catch (e: Exception) {
+                        val loginResult = auth.signInWithEmailAndPassword(email, password).await()
+                        uid = loginResult.user?.uid
+                    }
+                    
+                    if (uid != null) {
+                        val userMap = hashMapOf(
+                            "id" to uid,
+                            "username" to username,
+                            "role" to role.name,
+                            "fullName" to "$username Test",
+                            "email" to email,
+                            "phone" to "0123456789",
+                            "cccd" to "012345678912",
+                            "cccdFrontUrl" to "",
+                            "cccdBackUrl" to "",
+                            "address" to "",
+                            "workplace" to "",
+                            "bankName" to "",
+                            "bankAccount" to "",
+                            "bankOwner" to "",
+                            "transferContent" to ""
+                        )
+                        db.collection("users").document(uid).set(userMap).await()
+                        createdCount++
+                    }
+                } catch (e: Exception) {
+                    e.printStackTrace()
+                }
+            }
+        }
+        auth.signOut()
+        return "Đã kiểm tra và tạo $createdCount tài khoản mẫu."
+    }
+
     suspend fun account(session: UserSession): AccountProfile {
         val query = db.collection("users").whereEqualTo("username", session.username).get().await()
         if (query.isEmpty) error("Không tìm thấy tài khoản.")
