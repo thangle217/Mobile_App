@@ -14,7 +14,13 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CutCornerShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.Person
+import androidx.compose.material.icons.filled.List
+import androidx.compose.material.icons.filled.Notifications
+import androidx.compose.material.icons.filled.Warning
+import androidx.compose.material.icons.filled.Info
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -39,6 +45,19 @@ import com.example.myapplication.domain.model.UserRole
 import com.example.myapplication.domain.model.UserSession
 import kotlinx.coroutines.launch
 
+val LocalAppThemeIsLight = compositionLocalOf { false }
+
+fun AppScreen.getIcon(): ImageVector {
+    return when (this) {
+        AppScreen.Dashboard -> Icons.Default.Home
+        AppScreen.Account, AppScreen.Tenants, AppScreen.Users -> Icons.Default.Person
+        AppScreen.Notices -> Icons.Default.Notifications
+        AppScreen.Incidents -> Icons.Default.Warning
+        AppScreen.Electric, AppScreen.Water -> Icons.Default.Info
+        else -> Icons.Default.List
+    }
+}
+
 private val AppGreenDark  = Color(0xFF064E3B)
 private val AppGreenMid   = Color(0xFF0F766E)
 private val AppGreenLight = Color(0xFF34D399)
@@ -55,6 +74,7 @@ fun RentalManagerApp() {
     var restored by remember { mutableStateOf(false) }
     var session by remember { mutableStateOf<UserSession?>(null) }
     var screen by remember { mutableStateOf(AppScreen.Dashboard) }
+    var isLightMode by remember { mutableStateOf(false) }
 
     LaunchedEffect(Unit) {
         sessionStore.session.collect {
@@ -77,17 +97,20 @@ fun RentalManagerApp() {
             }
         )
     } else {
-        MainShell(
-            repository = repository,
-            session = session,
-            screen = screen,
-            onScreenChange = { screen = it },
-            onLogout = {
-                scope.launch { sessionStore.clear() }
-                session = null
-                screen = AppScreen.Dashboard
-            }
-        )
+        CompositionLocalProvider(LocalAppThemeIsLight provides isLightMode) {
+            MainShell(
+                repository = repository,
+                session = session,
+                screen = screen,
+                onScreenChange = { screen = it },
+                onLogout = {
+                    scope.launch { sessionStore.clear() }
+                    session = null
+                    screen = AppScreen.Dashboard
+                },
+                onToggleTheme = { isLightMode = !isLightMode }
+            )
+        }
     }
 }
 
@@ -97,7 +120,8 @@ internal fun MainShell(
     session: UserSession?,
     screen: AppScreen,
     onScreenChange: (AppScreen) -> Unit,
-    onLogout: () -> Unit
+    onLogout: () -> Unit,
+    onToggleTheme: () -> Unit
 ) {
     val role = session?.role ?: UserRole.ChuTro
     val screens = screensForRole(role)
@@ -140,10 +164,10 @@ internal fun MainShell(
                             ) {
                                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                                     Surface(shape = CutCornerShape(6.dp), color = accent.copy(alpha = if (active) 0.3f else 0.15f)) {
-                                        Text(
-                                            item.shortCode, color = if (active) AppGreenLight else Color.White.copy(alpha = 0.7f),
-                                            fontWeight = FontWeight.ExtraBold, fontSize = 10.sp,
-                                            modifier = Modifier.padding(horizontal = 6.dp, vertical = 3.dp)
+                                        Icon(
+                                            item.getIcon(), contentDescription = item.label,
+                                            tint = if (active) AppGreenLight else Color.White.copy(alpha = 0.7f),
+                                            modifier = Modifier.padding(6.dp).size(18.dp)
                                         )
                                     }
                                     Text(item.label, color = if (active) Color.White else Color.White.copy(alpha = 0.75f), fontWeight = if (active) FontWeight.Bold else FontWeight.Normal, fontSize = 13.sp)
@@ -159,9 +183,9 @@ internal fun MainShell(
             topBar = {
                 AppHeader(
                     title = screen.label,
-                    sourceLabel = "Dữ liệu thiết bị",
                     onMenu = { scope.launch { drawerState.open() } },
-                    onLogout = onLogout
+                    onLogout = onLogout,
+                    onToggleTheme = onToggleTheme
                 )
             },
             bottomBar = {
@@ -762,7 +786,7 @@ internal fun AccountScreen(
                             modifier = Modifier
                                 .weight(1f).height(48.dp)
                                 .clip(CutCornerShape(12.dp))
-                                .background(if (!saving) Brush.horizontalGradient(listOf(AppGreenMid, Color(0xFF0369A1))) else Brush.horizontalGradient(listOf(Color.Gray, Color.Gray)))
+                                .background(if (!saving) Brush.horizontalGradient(listOf(Color(0xFF0EA5E9), Color(0xFF0284C7))) else Brush.horizontalGradient(listOf(Color.Gray, Color.Gray)))
                                 .clickable(enabled = !saving) {
                                     if (editing) {
                                         val currentSession = session ?: return@clickable
@@ -789,11 +813,11 @@ internal fun AccountScreen(
                             modifier = Modifier
                                 .weight(1f).height(48.dp)
                                 .clip(CutCornerShape(12.dp))
-                                .background(Color.White.copy(alpha = 0.15f))
-                                .border(1.dp, AppGreenLight.copy(alpha = 0.5f), CutCornerShape(12.dp))
+                                .background(Color(0xFF0284C7).copy(alpha = 0.15f))
+                                .border(1.dp, Color(0xFF38BDF8).copy(alpha = 0.6f), CutCornerShape(12.dp))
                                 .clickable { changingPassword = true },
                             contentAlignment = Alignment.Center
-                        ) { Text("Đổi mật khẩu", color = AppGreenLight, fontWeight = FontWeight.Bold) }
+                        ) { Text("Đổi mật khẩu", color = Color(0xFF38BDF8), fontWeight = FontWeight.Bold) }
                     }
                     if (editing) {
                         TextButton(
@@ -837,11 +861,13 @@ internal fun ProfileEditor(
     val fieldColors = OutlinedTextFieldDefaults.colors(
         focusedTextColor = Color.White,
         unfocusedTextColor = Color.White,
+        focusedContainerColor = Color.White.copy(alpha = 0.1f),
+        unfocusedContainerColor = Color.White.copy(alpha = 0.05f),
         focusedBorderColor = AppGreenLight,
-        unfocusedBorderColor = Color.White.copy(alpha = 0.3f),
+        unfocusedBorderColor = Color.White.copy(alpha = 0.4f),
         cursorColor = AppGreenLight,
         focusedLabelColor = AppGreenLight,
-        unfocusedLabelColor = Color.White.copy(alpha = 0.55f)
+        unfocusedLabelColor = Color.White.copy(alpha = 0.8f)
     )
     Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
         OutlinedTextField(profile.fullName, { onChange(profile.copy(fullName = it)) }, label = { Text("Họ tên") }, modifier = Modifier.fillMaxWidth(), singleLine = true, shape = CutCornerShape(8.dp), colors = fieldColors)
