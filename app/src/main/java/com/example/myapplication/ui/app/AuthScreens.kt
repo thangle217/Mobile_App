@@ -604,15 +604,19 @@ internal fun LoginScreen(repository: RentalRepository, onLoggedIn: (UserSession)
                             withTransform({
                                 rotate(rotation, pivot = androidx.compose.ui.geometry.Offset(size.width / 2, size.height / 2))
                             }) {
-                                drawRect(
+                                val centerOffset = androidx.compose.ui.geometry.Offset(size.width / 2, size.height / 2)
+                                drawCircle(
                                     brush = Brush.sweepGradient(
                                         0.0f to Color.Transparent,
                                         0.05f to Color(0xFF34D399),
                                         0.1f to Color.White,
                                         0.15f to Color(0xFF34D399),
                                         0.2f to Color.Transparent,
-                                        1.0f to Color.Transparent
+                                        1.0f to Color.Transparent,
+                                        center = centerOffset
                                     ),
+                                    radius = maxOf(size.width, size.height),
+                                    center = centerOffset,
                                     blendMode = BlendMode.SrcIn
                                 )
                                 }
