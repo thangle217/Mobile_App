@@ -1,28 +1,50 @@
 package com.example.myapplication.ui.app
 
+import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.CutCornerShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Home
+import androidx.compose.material.icons.filled.Menu
+import androidx.compose.material.icons.filled.ExitToApp
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import com.example.myapplication.domain.model.AppScreen
 import com.example.myapplication.domain.model.DataSource
 import com.example.myapplication.domain.model.RentalItem
 import com.example.myapplication.domain.model.UiState
 import com.example.myapplication.domain.model.UserRole
+
+// ─── Design Tokens (matching Auth screen palette) ───────────────────────────
+private val GreenDark   = Color(0xFF064E3B)
+private val GreenMid    = Color(0xFF0F766E)
+private val GreenLight  = Color(0xFF34D399)
+private val TealAccent  = Color(0xFF0369A1)
+private val BgGradient  = Brush.verticalGradient(listOf(Color(0xFF0F766E), Color(0xFF064E3B)))
+private val CardBg      = Color.White.copy(alpha = 0.18f)
+private val CardBorder  = Color.White.copy(alpha = 0.35f)
 
 @Composable
 internal fun <T> StateContainer(
@@ -44,28 +66,28 @@ internal fun <T> StateContainer(
 
 @Composable
 internal fun FullScreenLoading(message: String) {
+    val infiniteTransition = rememberInfiniteTransition(label = "loading")
+    val pulse by infiniteTransition.animateFloat(
+        initialValue = 0.6f, targetValue = 1f,
+        animationSpec = infiniteRepeatable(tween(900, easing = FastOutSlowInEasing), RepeatMode.Reverse),
+        label = "pulse"
+    )
     Box(
-        modifier = Modifier
-            .fillMaxSize()
-            .background(Brush.verticalGradient(listOf(Color(0xFFF8FAFC), Color(0xFFF1F5F9)))),
+        modifier = Modifier.fillMaxSize().background(BgGradient),
         contentAlignment = Alignment.Center
     ) {
-        Column(
-            horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.spacedBy(16.dp)
-        ) {
-            CircularProgressIndicator(
-                color = Color(0xFF7C3AED), // Indigo accent
-                strokeWidth = 4.dp,
-                modifier = Modifier.size(48.dp)
-            )
-            Text(
-                text = message,
-                style = MaterialTheme.typography.bodyMedium.copy(
-                    fontWeight = FontWeight.Medium,
-                    color = Color(0xFF475569)
-                )
-            )
+        Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(20.dp)) {
+            Box(
+                modifier = Modifier
+                    .size(72.dp)
+                    .clip(CutCornerShape(20.dp))
+                    .background(Color.White.copy(alpha = 0.15f))
+                    .border(2.dp, GreenLight.copy(alpha = pulse), CutCornerShape(20.dp)),
+                contentAlignment = Alignment.Center
+            ) {
+                CircularProgressIndicator(color = GreenLight, strokeWidth = 3.dp, modifier = Modifier.size(36.dp))
+            }
+            Text(message, color = Color.White, fontWeight = FontWeight.Medium, fontSize = 15.sp)
         }
     }
 }
@@ -73,51 +95,31 @@ internal fun FullScreenLoading(message: String) {
 @Composable
 internal fun ErrorState(message: String, onRetry: () -> Unit, canRetry: Boolean = true) {
     Box(
-        modifier = Modifier
-            .fillMaxSize()
-            .background(Color(0xFFF8FAFC))
-            .padding(24.dp),
+        modifier = Modifier.fillMaxSize().background(BgGradient).padding(24.dp),
         contentAlignment = Alignment.Center
     ) {
-        Card(
-            shape = RoundedCornerShape(16.dp),
-            colors = CardDefaults.cardColors(containerColor = Color.White),
-            elevation = CardDefaults.cardElevation(defaultElevation = 6.dp)
+        Column(
+            modifier = Modifier
+                .clip(CutCornerShape(24.dp))
+                .background(CardBg)
+                .border(1.dp, CardBorder, CutCornerShape(24.dp))
+                .padding(28.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
-            Column(
-                modifier = Modifier.padding(24.dp),
-                horizontalAlignment = Alignment.CenterHorizontally,
-                verticalArrangement = Arrangement.spacedBy(16.dp)
+            Text("⚠️", fontSize = 36.sp)
+            Text("Không tải được dữ liệu", fontWeight = FontWeight.Bold, color = Color.White, fontSize = 16.sp)
+            Text(message, color = Color.White.copy(alpha = 0.75f), textAlign = TextAlign.Center, fontSize = 13.sp)
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(48.dp)
+                    .clip(CutCornerShape(14.dp))
+                    .background(Brush.horizontalGradient(listOf(GreenMid, TealAccent)))
+                    .clickable { onRetry() },
+                contentAlignment = Alignment.Center
             ) {
-                Box(
-                    modifier = Modifier
-                        .size(56.dp)
-                        .clip(CircleShape)
-                        .background(Color(0xFFFEF2F2)),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Text("⚠️", style = MaterialTheme.typography.titleLarge)
-                }
-                Text(
-                    "Không tải được dữ liệu",
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.Bold,
-                    color = Color(0xFF991B1B)
-                )
-                Text(
-                    message,
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = Color(0xFF64748B),
-                    textAlign = androidx.compose.ui.text.style.TextAlign.Center
-                )
-                Button(
-                    onClick = onRetry,
-                    shape = RoundedCornerShape(12.dp),
-                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF7C3AED)),
-                    modifier = Modifier.fillMaxWidth().height(48.dp)
-                ) {
-                    Text(if (canRetry) "Thử lại" else "Đăng nhập lại", fontWeight = FontWeight.Bold)
-                }
+                Text(if (canRetry) "Thử lại" else "Đăng nhập lại", color = Color.White, fontWeight = FontWeight.Bold, letterSpacing = 1.sp)
             }
         }
     }
@@ -126,38 +128,20 @@ internal fun ErrorState(message: String, onRetry: () -> Unit, canRetry: Boolean 
 @Composable
 internal fun EmptyState(message: String) {
     Box(
-        modifier = Modifier
-            .fillMaxSize()
-            .background(Color(0xFFF8FAFC))
-            .padding(24.dp),
+        modifier = Modifier.fillMaxSize().background(BgGradient).padding(24.dp),
         contentAlignment = Alignment.Center
     ) {
-        Card(
-            shape = RoundedCornerShape(16.dp),
-            colors = CardDefaults.cardColors(containerColor = Color.White),
-            elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
+        Column(
+            modifier = Modifier
+                .clip(CutCornerShape(24.dp))
+                .background(CardBg)
+                .border(1.dp, CardBorder, CutCornerShape(24.dp))
+                .padding(32.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
-            Column(
-                modifier = Modifier.padding(32.dp),
-                horizontalAlignment = Alignment.CenterHorizontally,
-                verticalArrangement = Arrangement.spacedBy(12.dp)
-            ) {
-                Box(
-                    modifier = Modifier
-                        .size(64.dp)
-                        .clip(CircleShape)
-                        .background(Color(0xFFEEF2F6)),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Text("📂", style = MaterialTheme.typography.titleLarge)
-                }
-                Text(
-                    message,
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = Color(0xFF64748B),
-                    textAlign = androidx.compose.ui.text.style.TextAlign.Center
-                )
-            }
+            Text("📂", fontSize = 36.sp)
+            Text(message, color = Color.White.copy(alpha = 0.85f), textAlign = TextAlign.Center, fontSize = 13.sp)
         }
     }
 }
@@ -167,30 +151,25 @@ internal fun AppHeader(title: String, sourceLabel: String, onMenu: () -> Unit, o
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .background(Brush.horizontalGradient(listOf(Color(0xFF4F46E5), Color(0xFF06B6D4)))) // Indigo to Cyan gradient
-            .padding(horizontal = 16.dp, vertical = 14.dp),
+            .background(Brush.horizontalGradient(listOf(GreenDark, GreenMid)))
+            .padding(horizontal = 12.dp, vertical = 12.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        TextButton(onClick = onMenu) {
-            Text("Menu", color = Color.White, fontWeight = FontWeight.Bold)
+        IconButton(onClick = onMenu) {
+            Icon(Icons.Default.Menu, contentDescription = "Menu", tint = Color.White)
         }
-        Column(modifier = Modifier.weight(1f).padding(horizontal = 8.dp)) {
+        Spacer(Modifier.width(4.dp))
+        Column(modifier = Modifier.weight(1f)) {
             Text(
-                title,
-                color = Color.White,
-                style = MaterialTheme.typography.titleLarge,
+                title, color = Color.White,
+                style = MaterialTheme.typography.titleMedium,
                 fontWeight = FontWeight.ExtraBold,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis
+                maxLines = 1, overflow = TextOverflow.Ellipsis
             )
-            Text(
-                sourceLabel,
-                color = Color.White.copy(alpha = 0.8f),
-                style = MaterialTheme.typography.labelMedium
-            )
+            Text(sourceLabel, color = GreenLight.copy(alpha = 0.9f), style = MaterialTheme.typography.labelSmall)
         }
-        TextButton(onClick = onLogout) {
-            Text("Thoát", color = Color.White.copy(alpha = 0.9f), fontWeight = FontWeight.Bold)
+        IconButton(onClick = onLogout) {
+            Icon(Icons.Default.ExitToApp, contentDescription = "Thoát", tint = Color.White.copy(alpha = 0.9f))
         }
     }
 }
@@ -198,16 +177,13 @@ internal fun AppHeader(title: String, sourceLabel: String, onMenu: () -> Unit, o
 @Composable
 internal fun AppBottomBar(items: List<AppScreen>, selected: AppScreen, onSelected: (AppScreen) -> Unit) {
     Surface(
-        color = Color.White,
+        color = GreenDark,
         shadowElevation = 16.dp,
-        tonalElevation = 8.dp,
-        border = BorderStroke(1.dp, Color(0xFFF1F5F9))
+        border = BorderStroke(1.dp, GreenLight.copy(alpha = 0.25f))
     ) {
         Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 12.dp, vertical = 10.dp),
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 8.dp),
+            horizontalArrangement = Arrangement.spacedBy(6.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
             items.forEach { item ->
@@ -216,34 +192,33 @@ internal fun AppBottomBar(items: List<AppScreen>, selected: AppScreen, onSelecte
                 Surface(
                     onClick = { onSelected(item) },
                     modifier = Modifier.weight(1f),
-                    shape = RoundedCornerShape(12.dp),
-                    color = if (active) accent.copy(alpha = 0.12f) else Color.Transparent,
-                    border = BorderStroke(1.dp, if (active) accent.copy(alpha = 0.3f) else Color.Transparent)
+                    shape = CutCornerShape(10.dp),
+                    color = if (active) GreenLight.copy(alpha = 0.2f) else Color.Transparent,
+                    border = BorderStroke(1.dp, if (active) GreenLight.copy(alpha = 0.6f) else Color.Transparent)
                 ) {
                     Column(
-                        modifier = Modifier.padding(vertical = 8.dp),
+                        modifier = Modifier.padding(vertical = 6.dp),
                         horizontalAlignment = Alignment.CenterHorizontally,
-                        verticalArrangement = Arrangement.spacedBy(4.dp)
+                        verticalArrangement = Arrangement.spacedBy(3.dp)
                     ) {
                         Surface(
-                            shape = RoundedCornerShape(8.dp),
-                            color = if (active) accent else accent.copy(alpha = 0.08f)
+                            shape = CutCornerShape(6.dp),
+                            color = if (active) GreenLight else Color.White.copy(alpha = 0.12f)
                         ) {
                             Text(
                                 item.shortCode,
-                                color = if (active) Color.White else accent,
-                                fontWeight = FontWeight.Bold,
+                                color = if (active) GreenDark else Color.White.copy(alpha = 0.7f),
+                                fontWeight = FontWeight.ExtraBold,
                                 style = MaterialTheme.typography.labelSmall,
-                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp)
+                                modifier = Modifier.padding(horizontal = 7.dp, vertical = 3.dp)
                             )
                         }
                         Text(
                             item.label,
-                            color = if (active) accent else Color(0xFF64748B),
-                            fontWeight = if (active) FontWeight.Bold else FontWeight.Medium,
+                            color = if (active) GreenLight else Color.White.copy(alpha = 0.6f),
+                            fontWeight = if (active) FontWeight.Bold else FontWeight.Normal,
                             style = MaterialTheme.typography.labelSmall,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis
+                            maxLines = 1, overflow = TextOverflow.Ellipsis
                         )
                     }
                 }
@@ -257,26 +232,21 @@ internal fun AppLogo(size: Int) {
     Box(
         modifier = Modifier
             .size(size.dp)
-            .clip(RoundedCornerShape(12.dp))
-            .background(Brush.linearGradient(listOf(Color(0xFF06B6D4), Color(0xFF3B82F6))))
-            .border(1.dp, Color.White.copy(alpha = 0.2f), RoundedCornerShape(12.dp)),
+            .clip(CutCornerShape((size * 0.28f).dp))
+            .background(Brush.linearGradient(listOf(GreenMid, GreenDark)))
+            .border(1.dp, GreenLight.copy(alpha = 0.5f), CutCornerShape((size * 0.28f).dp)),
         contentAlignment = Alignment.Center
     ) {
-        Icon(
-            imageVector = Icons.Default.Home,
-            contentDescription = "Home Logo",
-            tint = Color.White,
-            modifier = Modifier.size((size * 0.55f).dp)
-        )
+        Icon(Icons.Default.Home, contentDescription = "Logo", tint = Color.White, modifier = Modifier.size((size * 0.55f).dp))
     }
 }
 
 @Composable
 internal fun StatusPill(status: String) {
     Surface(
-        color = statusColor(status).copy(alpha = 0.12f),
-        shape = RoundedCornerShape(8.dp),
-        border = BorderStroke(1.dp, statusColor(status).copy(alpha = 0.18f))
+        color = statusColor(status).copy(alpha = 0.18f),
+        shape = CutCornerShape(6.dp),
+        border = BorderStroke(1.dp, statusColor(status).copy(alpha = 0.3f))
     ) {
         Text(
             text = status,
@@ -290,18 +260,27 @@ internal fun StatusPill(status: String) {
 
 @Composable
 internal fun DetailRow(label: String, value: String) {
-    Column(modifier = Modifier.padding(vertical = 4.dp)) {
-        Text(label, color = Color(0xFF64748B), style = MaterialTheme.typography.labelMedium)
-        Text(value, fontWeight = FontWeight.Medium, color = Color(0xFF1E293B), style = MaterialTheme.typography.bodyMedium)
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(CutCornerShape(8.dp))
+            .background(Color.White.copy(alpha = 0.08f))
+            .padding(horizontal = 12.dp, vertical = 8.dp),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Text(label, color = GreenLight.copy(alpha = 0.85f), style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.SemiBold)
+        Spacer(Modifier.width(8.dp))
+        Text(value, fontWeight = FontWeight.Medium, color = Color.White, style = MaterialTheme.typography.bodySmall, textAlign = TextAlign.End, modifier = Modifier.weight(1f, false))
     }
 }
 
 @Composable
 internal fun SectionTitle(text: String) {
-    Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(vertical = 8.dp)) {
-        Box(Modifier.size(width = 4.dp, height = 22.dp).clip(RoundedCornerShape(8.dp)).background(Color(0xFFF59E0B)))
+    Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(vertical = 6.dp)) {
+        Box(Modifier.size(width = 4.dp, height = 20.dp).clip(RoundedCornerShape(4.dp)).background(GreenLight))
         Spacer(Modifier.width(8.dp))
-        Text(text, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, color = Color(0xFF1E293B))
+        Text(text, style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold, color = Color.White)
     }
 }
 
@@ -330,26 +309,12 @@ internal fun bottomScreens(role: UserRole): List<AppScreen> = when (role) {
 internal fun canManageScreen(role: UserRole, screen: AppScreen): Boolean = when (role) {
     UserRole.Admin -> screen != AppScreen.Account
     UserRole.ChuTro -> screen in setOf(
-        AppScreen.Houses,
-        AppScreen.RoomTypes,
-        AppScreen.Rooms,
-        AppScreen.Tenants,
-        AppScreen.Contracts,
-        AppScreen.Invoices,
-        AppScreen.Payments,
-        AppScreen.Services,
-        AppScreen.ServiceRegs,
-        AppScreen.Electric,
-        AppScreen.Water,
-        AppScreen.RentRequests,
-        AppScreen.RenewRequests,
-        AppScreen.Incidents,
-        AppScreen.Notices
+        AppScreen.Houses, AppScreen.RoomTypes, AppScreen.Rooms, AppScreen.Tenants,
+        AppScreen.Contracts, AppScreen.Invoices, AppScreen.Payments, AppScreen.Services,
+        AppScreen.ServiceRegs, AppScreen.Electric, AppScreen.Water, AppScreen.RentRequests,
+        AppScreen.RenewRequests, AppScreen.Incidents, AppScreen.Notices
     )
-    UserRole.NguoiDung -> screen in setOf(
-        AppScreen.Payments,
-        AppScreen.Incidents
-    )
+    UserRole.NguoiDung -> screen in setOf(AppScreen.Payments, AppScreen.Incidents)
 }
 
 internal fun sourceLabel(source: DataSource): String = when (source) {
@@ -369,32 +334,32 @@ internal fun defaultStatus(screen: AppScreen): String = when (screen) {
 }
 
 internal fun statusColor(status: String): Color = when {
-    status.contains("Đã", true) || status.contains("Còn trống", true) || status.contains("Đang sử dụng", true) -> Color(0xFF10B981)
-    status.contains("Chờ", true) || status.contains("Chưa", true) || status.contains("Một phần", true) || status.contains("Sắp", true) || status.contains("Cần", true) -> Color(0xFFF59E0B)
-    status.contains("Từ chối", true) || status.contains("Hủy", true) || status.contains("Tạm dừng", true) -> Color(0xFFEF4444)
-    status.contains("Đang", true) || status.contains("Mới", true) -> Color(0xFF3B82F6)
-    else -> Color(0xFF64748B)
+    status.contains("Đã", true) || status.contains("Còn trống", true) || status.contains("Đang sử dụng", true) -> Color(0xFF34D399)
+    status.contains("Chờ", true) || status.contains("Chưa", true) || status.contains("Một phần", true) || status.contains("Sắp", true) || status.contains("Cần", true) -> Color(0xFFFBBF24)
+    status.contains("Từ chối", true) || status.contains("Hủy", true) || status.contains("Tạm dừng", true) -> Color(0xFFF87171)
+    status.contains("Đang", true) || status.contains("Mới", true) -> Color(0xFF60A5FA)
+    else -> Color(0xFF94A3B8)
 }
 
 internal fun screenAccent(screen: AppScreen): Color = when (screen) {
-    AppScreen.Dashboard -> Color(0xFF6366F1)
+    AppScreen.Dashboard -> Color(0xFF34D399)
     AppScreen.Houses -> Color(0xFF0D9488)
     AppScreen.RoomTypes -> Color(0xFF06B6D4)
     AppScreen.Rooms -> Color(0xFF0891B2)
     AppScreen.Tenants -> Color(0xFF10B981)
-    AppScreen.Contracts -> Color(0xFF6366F1)
-    AppScreen.Invoices -> Color(0xFFF59E0B)
-    AppScreen.Payments -> Color(0xFFEA580C)
-    AppScreen.Services -> Color(0xFF14B8A6)
-    AppScreen.ServiceRegs -> Color(0xFF84CC16)
-    AppScreen.Electric -> Color(0xFFEAB308)
-    AppScreen.Water -> Color(0xFF0284C7)
-    AppScreen.RentRequests -> Color(0xFFEC4899)
-    AppScreen.RenewRequests -> Color(0xFFA855F7)
-    AppScreen.Incidents -> Color(0xFFEF4444)
-    AppScreen.Notices -> Color(0xFF3B82F6)
-    AppScreen.Users -> Color(0xFF64748B)
-    AppScreen.Account -> Color(0xFF0F766E)
+    AppScreen.Contracts -> Color(0xFF818CF8)
+    AppScreen.Invoices -> Color(0xFFFBBF24)
+    AppScreen.Payments -> Color(0xFFFB923C)
+    AppScreen.Services -> Color(0xFF2DD4BF)
+    AppScreen.ServiceRegs -> Color(0xFFA3E635)
+    AppScreen.Electric -> Color(0xFFFDE047)
+    AppScreen.Water -> Color(0xFF38BDF8)
+    AppScreen.RentRequests -> Color(0xFFF472B6)
+    AppScreen.RenewRequests -> Color(0xFFC084FC)
+    AppScreen.Incidents -> Color(0xFFF87171)
+    AppScreen.Notices -> Color(0xFF60A5FA)
+    AppScreen.Users -> Color(0xFF94A3B8)
+    AppScreen.Account -> Color(0xFF34D399)
 }
 
 internal fun RentalItem.detail(key: String): String = details.firstOrNull { it.first == key }?.second.orEmpty()
