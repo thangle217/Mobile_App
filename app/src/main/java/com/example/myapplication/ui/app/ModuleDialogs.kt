@@ -65,39 +65,55 @@ internal fun ChangePasswordDialog(
     var newPassword by remember { mutableStateOf("") }
     var confirmPassword by remember { mutableStateOf("") }
 
+    val fieldColors = OutlinedTextFieldDefaults.colors(
+        focusedTextColor = Color.White,
+        unfocusedTextColor = Color.White,
+        focusedBorderColor = Color(0xFF34D399),
+        unfocusedBorderColor = Color.White.copy(alpha = 0.3f),
+        cursorColor = Color(0xFF34D399),
+        focusedLabelColor = Color(0xFF34D399),
+        unfocusedLabelColor = Color.White.copy(alpha = 0.55f)
+    )
+
     AlertDialog(
         onDismissRequest = onDismiss,
-        shape = RoundedCornerShape(16.dp),
-        title = { Text("Đổi mật khẩu", fontWeight = FontWeight.Bold, color = Color(0xFF1E293B)) },
+        title = { Text("Đổi mật khẩu", fontWeight = FontWeight.Bold, color = Color.White) },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
                 OutlinedTextField(
                     value = oldPassword, onValueChange = { oldPassword = it },
                     label = { Text("Mật khẩu cũ") }, visualTransformation = PasswordVisualTransformation(),
-                    modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(8.dp)
+                    modifier = Modifier.fillMaxWidth(), shape = CutCornerShape(8.dp), colors = fieldColors
                 )
                 OutlinedTextField(
                     value = newPassword, onValueChange = { newPassword = it },
                     label = { Text("Mật khẩu mới") }, visualTransformation = PasswordVisualTransformation(),
-                    modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(8.dp)
+                    modifier = Modifier.fillMaxWidth(), shape = CutCornerShape(8.dp), colors = fieldColors
                 )
                 OutlinedTextField(
                     value = confirmPassword, onValueChange = { confirmPassword = it },
                     label = { Text("Nhập lại mật khẩu mới") }, visualTransformation = PasswordVisualTransformation(),
-                    modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(8.dp)
+                    modifier = Modifier.fillMaxWidth(), shape = CutCornerShape(8.dp), colors = fieldColors
                 )
             }
         },
         confirmButton = {
-            Button(
-                enabled = !saving,
-                onClick = { onSubmit(oldPassword, newPassword, confirmPassword) },
-                shape = RoundedCornerShape(8.dp)
+            Box(
+                modifier = Modifier
+                    .clip(CutCornerShape(10.dp))
+                    .background(Brush.horizontalGradient(listOf(Color(0xFF0F766E), Color(0xFF0369A1))))
+                    .clickable(enabled = !saving) { onSubmit(oldPassword, newPassword, confirmPassword) }
+                    .padding(horizontal = 20.dp, vertical = 10.dp)
             ) {
-                Text(if (saving) "Đang lưu..." else "Đổi mật khẩu", fontWeight = FontWeight.Bold)
+                Text(if (saving) "Đang lưu..." else "Đổi mật khẩu", color = Color.White, fontWeight = FontWeight.Bold)
             }
         },
-        dismissButton = { TextButton(onClick = onDismiss) { Text("Hủy") } }
+        dismissButton = {
+            TextButton(onClick = onDismiss) { Text("Hủy", color = Color(0xFF34D399)) }
+        },
+        containerColor = Color(0xFF064E3B),
+        titleContentColor = Color.White,
+        shape = CutCornerShape(20.dp)
     )
 }
 
