@@ -36,12 +36,7 @@ import com.example.myapplication.domain.model.UserRole
 import com.example.myapplication.domain.model.UserSession
 import com.example.myapplication.domain.util.formatCompactMoney
 
-private val GreenDark   = Color(0xFF064E3B)
-private val GreenMid    = Color(0xFF0F766E)
-private val GreenLight  = Color(0xFF34D399)
-private val BgGradient  = Brush.verticalGradient(listOf(Color(0xFF0F766E), Color(0xFF064E3B)))
-private val CardBg      = Color.White.copy(alpha = 0.15f)
-private val CardBorder  = Color.White.copy(alpha = 0.3f)
+// Colors are now imported from CommonComponents.kt
 
 @Composable
 internal fun DashboardScreen(
@@ -66,7 +61,7 @@ internal fun DashboardScreen(
             item { HeroCard(session, summary, source) }
             item {
                 Row(horizontalArrangement = Arrangement.spacedBy(12.dp), modifier = Modifier.fillMaxWidth()) {
-                    StatCard("Phòng trọ", summary.totalRooms.toString(), "${summary.emptyRooms} phòng trống", GreenLight, Modifier.weight(1f))
+                    StatCard("Phòng trọ", summary.totalRooms.toString(), "${summary.emptyRooms} phòng trống", AppGreenLight, Modifier.weight(1f))
                     StatCard("Hóa đơn", summary.unpaidInvoices.toString(), "Hóa đơn chưa thu", Color(0xFFFBBF24), Modifier.weight(1f))
                 }
             }
@@ -95,8 +90,8 @@ internal fun HeroCard(session: UserSession?, summary: DashboardSummary, source: 
         modifier = Modifier
             .fillMaxWidth()
             .clip(CutCornerShape(24.dp))
-            .background(CardBg)
-            .border(2.dp, GreenLight.copy(alpha = shimmer * 0.6f), CutCornerShape(24.dp))
+            .background(AppCardBg)
+            .border(2.dp, AppGreenLight.copy(alpha = shimmer * 0.6f), CutCornerShape(24.dp))
             .padding(20.dp)
     ) {
         Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
@@ -107,12 +102,14 @@ internal fun HeroCard(session: UserSession?, summary: DashboardSummary, source: 
                         "Xin chào, ${session?.displayName ?: "bạn"} 👋",
                         color = Color.White, fontWeight = FontWeight.ExtraBold, fontSize = 18.sp
                     )
-                    Text(session?.role?.label ?: "", color = GreenLight, fontSize = 12.sp, fontWeight = FontWeight.Medium)
+                    Text(session?.role?.label ?: "", color = AppGreenLight, fontSize = 12.sp, fontWeight = FontWeight.Medium)
                 }
             }
             Text(
-                "Hệ thống quản lý phòng trọ. Dữ liệu được lưu trực tiếp và đồng bộ trên thiết bị của bạn.",
-                color = Color.White.copy(alpha = 0.75f), fontSize = 12.sp
+                "Giải pháp quản lý nhà trọ đơn giản và hiệu quả. Dữ liệu của bạn luôn được bảo mật và đồng bộ.",
+                color = Color.White.copy(alpha = 0.85f),
+                fontSize = 13.sp,
+                lineHeight = 18.sp
             )
             Row(horizontalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.fillMaxWidth()) {
                 HeroMiniMetric("Nguồn", sourceLabel(source), Modifier.weight(1f))
@@ -132,7 +129,7 @@ internal fun HeroMiniMetric(label: String, value: String, modifier: Modifier = M
             .padding(10.dp)
     ) {
         Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
-            Text(label, color = GreenLight.copy(alpha = 0.85f), fontSize = 11.sp, fontWeight = FontWeight.Medium)
+            Text(label, color = AppGreenLight.copy(alpha = 0.85f), fontSize = 11.sp, fontWeight = FontWeight.Medium)
             Text(value, color = Color.White, fontWeight = FontWeight.Bold, fontSize = 15.sp, maxLines = 1)
         }
     }
@@ -182,19 +179,19 @@ internal fun QuickActions(role: UserRole, onOpen: (AppScreen) -> Unit) {
                         modifier = Modifier
                             .fillMaxWidth()
                             .height(3.dp)
-                            .background(Brush.horizontalGradient(listOf(accent, GreenLight)))
+                            .background(Brush.horizontalGradient(listOf(accent, AppGreenLight)))
                     )
                     Column(modifier = Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
                         Surface(shape = CutCornerShape(6.dp), color = accent.copy(alpha = 0.2f)) {
-                            Text(
-                                action.first.shortCode, color = accent,
-                                fontWeight = FontWeight.ExtraBold,
-                                style = MaterialTheme.typography.labelSmall,
-                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp)
+                            Icon(
+                                imageVector = action.first.getIcon(),
+                                contentDescription = action.second,
+                                tint = accent,
+                                modifier = Modifier.padding(8.dp).size(24.dp)
                             )
                         }
                         Text(action.second, fontWeight = FontWeight.Bold, color = Color.White, fontSize = 13.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                        Text(action.first.label, color = GreenLight.copy(alpha = 0.8f), fontSize = 11.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                        Text(action.first.label, color = AppGreenLight.copy(alpha = 0.8f), fontSize = 11.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
                     }
                 }
             }

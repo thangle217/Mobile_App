@@ -58,12 +58,7 @@ fun AppScreen.getIcon(): ImageVector {
     }
 }
 
-private val AppGreenDark  = Color(0xFF064E3B)
-private val AppGreenMid   = Color(0xFF0F766E)
-private val AppGreenLight = Color(0xFF34D399)
-private val AppBgGradient = Brush.verticalGradient(listOf(Color(0xFF0F766E), Color(0xFF064E3B)))
-private val AppCardBg     = Color.White.copy(alpha = 0.15f)
-private val AppCardBorder = Color.White.copy(alpha = 0.28f)
+// Colors are now imported from CommonComponents.kt
 
 @Composable
 fun RentalManagerApp() {
@@ -135,7 +130,7 @@ internal fun MainShell(
                 drawerContainerColor = AppGreenDark,
                 drawerContentColor = Color.White
             ) {
-                Column(modifier = Modifier.background(AppBgGradient).fillMaxHeight().padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                Column(modifier = Modifier.background(BgGradient).fillMaxHeight().padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
                     Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(vertical = 12.dp)) {
                         AppLogo(size = 44)
                         Spacer(Modifier.width(12.dp))
@@ -271,7 +266,7 @@ internal fun ModuleScreen(
         LazyColumn(
             modifier = Modifier
                 .fillMaxSize()
-                .background(AppBgGradient)
+                .background(BgGradient)
                 .padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(14.dp)
         ) {
@@ -734,7 +729,7 @@ internal fun AccountScreen(
         LazyColumn(
             modifier = Modifier
                 .fillMaxSize()
-                .background(AppBgGradient)
+                .background(BgGradient)
                 .padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
@@ -919,7 +914,12 @@ internal fun ModuleHeader(screen: AppScreen, count: Int, source: DataSource) {
     ) {
         Surface(shape = CutCornerShape(10.dp), color = accent.copy(alpha = 0.2f), modifier = Modifier.size(44.dp)) {
             Box(contentAlignment = Alignment.Center) {
-                Text(screen.shortCode, color = accent, fontWeight = FontWeight.ExtraBold, fontSize = 14.sp)
+                Icon(
+                    imageVector = screen.getIcon(),
+                    contentDescription = screen.label,
+                    tint = accent,
+                    modifier = Modifier.size(24.dp)
+                )
             }
         }
         Spacer(Modifier.width(14.dp))

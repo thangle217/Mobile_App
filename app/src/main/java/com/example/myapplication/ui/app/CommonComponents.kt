@@ -38,13 +38,13 @@ import com.example.myapplication.domain.model.UiState
 import com.example.myapplication.domain.model.UserRole
 
 // ─── Design Tokens (matching Auth screen palette) ───────────────────────────
-private val GreenDark @Composable get() = if (LocalAppThemeIsLight.current) Color(0xFF059669) else Color(0xFF064E3B)
-private val GreenMid @Composable get() = if (LocalAppThemeIsLight.current) Color(0xFF10B981) else Color(0xFF0F766E)
-private val GreenLight @Composable get() = if (LocalAppThemeIsLight.current) Color(0xFF6EE7B7) else Color(0xFF34D399)
-private val TealAccent @Composable get() = if (LocalAppThemeIsLight.current) Color(0xFF0284C7) else Color(0xFF0369A1)
-private val BgGradient @Composable get() = Brush.verticalGradient(listOf(GreenMid, GreenDark))
-private val CardBg @Composable get() = Color.White.copy(alpha = if (LocalAppThemeIsLight.current) 0.25f else 0.18f)
-private val CardBorder @Composable get() = Color.White.copy(alpha = if (LocalAppThemeIsLight.current) 0.5f else 0.35f)
+internal val AppGreenDark @Composable get() = if (LocalAppThemeIsLight.current) Color(0xFF059669) else Color(0xFF064E3B)
+internal val AppGreenMid @Composable get() = if (LocalAppThemeIsLight.current) Color(0xFF10B981) else Color(0xFF0F766E)
+internal val AppGreenLight @Composable get() = if (LocalAppThemeIsLight.current) Color(0xFF6EE7B7) else Color(0xFF34D399)
+internal val AppTealAccent @Composable get() = if (LocalAppThemeIsLight.current) Color(0xFF0284C7) else Color(0xFF0369A1)
+internal val BgGradient @Composable get() = Brush.verticalGradient(listOf(AppGreenMid, AppGreenDark))
+internal val AppCardBg @Composable get() = Color.White.copy(alpha = if (LocalAppThemeIsLight.current) 0.25f else 0.18f)
+internal val AppCardBorder @Composable get() = Color.White.copy(alpha = if (LocalAppThemeIsLight.current) 0.5f else 0.35f)
 @Composable
 internal fun <T> StateContainer(
     state: UiState<T>,
@@ -76,7 +76,7 @@ internal fun FullScreenLoading(message: String) {
         contentAlignment = Alignment.Center
     ) {
         Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(20.dp)) {
-            CircularProgressIndicator(color = GreenLight, strokeWidth = 3.dp, modifier = Modifier.size(48.dp))
+            CircularProgressIndicator(color = AppGreenLight, strokeWidth = 3.dp, modifier = Modifier.size(48.dp))
             Text(message, color = Color.White, fontWeight = FontWeight.Medium, fontSize = 15.sp)
         }
     }
@@ -91,8 +91,8 @@ internal fun ErrorState(message: String, onRetry: () -> Unit, canRetry: Boolean 
         Column(
             modifier = Modifier
                 .clip(CutCornerShape(24.dp))
-                .background(CardBg)
-                .border(1.dp, CardBorder, CutCornerShape(24.dp))
+                .background(AppCardBg)
+                .border(1.dp, AppCardBorder, CutCornerShape(24.dp))
                 .padding(28.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.spacedBy(16.dp)
@@ -105,7 +105,7 @@ internal fun ErrorState(message: String, onRetry: () -> Unit, canRetry: Boolean 
                     .fillMaxWidth()
                     .height(48.dp)
                     .clip(CutCornerShape(14.dp))
-                    .background(Brush.horizontalGradient(listOf(GreenMid, TealAccent)))
+                    .background(Brush.horizontalGradient(listOf(AppGreenMid, AppTealAccent)))
                     .clickable { onRetry() },
                 contentAlignment = Alignment.Center
             ) {
@@ -124,8 +124,8 @@ internal fun EmptyState(message: String) {
         Column(
             modifier = Modifier
                 .clip(CutCornerShape(24.dp))
-                .background(CardBg)
-                .border(1.dp, CardBorder, CutCornerShape(24.dp))
+                .background(AppCardBg)
+                .border(1.dp, AppCardBorder, CutCornerShape(24.dp))
                 .padding(32.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.spacedBy(12.dp)
@@ -141,7 +141,7 @@ internal fun AppHeader(title: String, onMenu: () -> Unit, onLogout: () -> Unit, 
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .background(Brush.horizontalGradient(listOf(GreenDark, GreenMid)))
+            .background(Brush.horizontalGradient(listOf(AppGreenDark, AppGreenMid)))
             .padding(horizontal = 16.dp, vertical = 12.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
@@ -178,7 +178,7 @@ internal fun AppHeader(title: String, onMenu: () -> Unit, onLogout: () -> Unit, 
                     .clickable { onToggleTheme() }
                     .padding(8.dp)
             ) {
-                Text(if (LocalAppThemeIsLight.current) "☀️" else "🌙", fontSize = 14.sp)
+                Text(if (LocalAppThemeIsLight.current) "☼" else "☾", fontSize = 16.sp, color = Color.White)
             }
             
             Box(
@@ -198,9 +198,9 @@ internal fun AppHeader(title: String, onMenu: () -> Unit, onLogout: () -> Unit, 
 @Composable
 internal fun AppBottomBar(items: List<AppScreen>, selected: AppScreen, onSelected: (AppScreen) -> Unit) {
     Surface(
-        color = GreenDark,
+        color = AppGreenDark,
         shadowElevation = 16.dp,
-        border = BorderStroke(1.dp, GreenLight.copy(alpha = 0.25f))
+        border = BorderStroke(1.dp, AppGreenLight.copy(alpha = 0.25f))
     ) {
         Row(
             modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 8.dp),
@@ -214,8 +214,8 @@ internal fun AppBottomBar(items: List<AppScreen>, selected: AppScreen, onSelecte
                     onClick = { onSelected(item) },
                     modifier = Modifier.weight(1f),
                     shape = CutCornerShape(10.dp),
-                    color = if (active) GreenLight.copy(alpha = 0.2f) else Color.Transparent,
-                    border = BorderStroke(1.dp, if (active) GreenLight.copy(alpha = 0.6f) else Color.Transparent)
+                    color = if (active) AppGreenLight.copy(alpha = 0.2f) else Color.Transparent,
+                    border = BorderStroke(1.dp, if (active) AppGreenLight.copy(alpha = 0.6f) else Color.Transparent)
                 ) {
                     Column(
                         modifier = Modifier.padding(vertical = 6.dp),
@@ -224,19 +224,18 @@ internal fun AppBottomBar(items: List<AppScreen>, selected: AppScreen, onSelecte
                     ) {
                         Surface(
                             shape = CutCornerShape(6.dp),
-                            color = if (active) GreenLight else Color.White.copy(alpha = 0.12f)
+                            color = if (active) AppGreenLight else Color.White.copy(alpha = 0.12f)
                         ) {
-                            Text(
-                                item.shortCode,
-                                color = if (active) GreenDark else Color.White.copy(alpha = 0.7f),
-                                fontWeight = FontWeight.ExtraBold,
-                                style = MaterialTheme.typography.labelSmall,
-                                modifier = Modifier.padding(horizontal = 7.dp, vertical = 3.dp)
+                            Icon(
+                                imageVector = item.getIcon(),
+                                contentDescription = item.label,
+                                tint = if (active) AppGreenDark else Color.White.copy(alpha = 0.7f),
+                                modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp).size(20.dp)
                             )
                         }
                         Text(
                             item.label,
-                            color = if (active) GreenLight else Color.White.copy(alpha = 0.6f),
+                            color = if (active) AppGreenLight else Color.White.copy(alpha = 0.6f),
                             fontWeight = if (active) FontWeight.Bold else FontWeight.Normal,
                             style = MaterialTheme.typography.labelSmall,
                             maxLines = 1, overflow = TextOverflow.Ellipsis
@@ -254,8 +253,8 @@ internal fun AppLogo(size: Int) {
         modifier = Modifier
             .size(size.dp)
             .clip(CutCornerShape((size * 0.28f).dp))
-            .background(Brush.linearGradient(listOf(GreenMid, GreenDark)))
-            .border(1.dp, GreenLight.copy(alpha = 0.5f), CutCornerShape((size * 0.28f).dp)),
+            .background(Brush.linearGradient(listOf(AppGreenMid, AppGreenDark)))
+            .border(1.dp, AppGreenLight.copy(alpha = 0.5f), CutCornerShape((size * 0.28f).dp)),
         contentAlignment = Alignment.Center
     ) {
         Icon(Icons.Default.Home, contentDescription = "Logo", tint = Color.White, modifier = Modifier.size((size * 0.55f).dp))
@@ -290,7 +289,7 @@ internal fun DetailRow(label: String, value: String) {
         horizontalArrangement = Arrangement.SpaceBetween,
         verticalAlignment = Alignment.CenterVertically
     ) {
-        Text(label, color = GreenLight.copy(alpha = 0.85f), style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.SemiBold)
+        Text(label, color = AppGreenLight.copy(alpha = 0.85f), style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.SemiBold)
         Spacer(Modifier.width(8.dp))
         Text(value, fontWeight = FontWeight.Medium, color = Color.White, style = MaterialTheme.typography.bodySmall, textAlign = TextAlign.End, modifier = Modifier.weight(1f, false))
     }
@@ -299,7 +298,7 @@ internal fun DetailRow(label: String, value: String) {
 @Composable
 internal fun SectionTitle(text: String) {
     Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(vertical = 6.dp)) {
-        Box(Modifier.size(width = 4.dp, height = 20.dp).clip(RoundedCornerShape(4.dp)).background(GreenLight))
+        Box(Modifier.size(width = 4.dp, height = 20.dp).clip(RoundedCornerShape(4.dp)).background(AppGreenLight))
         Spacer(Modifier.width(8.dp))
         Text(text, style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold, color = Color.White)
     }

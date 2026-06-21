@@ -288,20 +288,21 @@ internal fun LoginScreen(repository: RentalRepository, onLoggedIn: (UserSession)
         password = if (next == UserRole.Admin) "Admin123" else "123456"
     }
 
+    val isLight = LocalAppThemeIsLight.current
+    val bgColors = if (isLight) {
+        listOf(Color(0xFF10B981), Color(0xFF059669))
+    } else {
+        listOf(Color(0xFF0F766E), Color(0xFF064E3B))
+    }
+
     Box(
-        modifier = Modifier.fillMaxSize()
+        modifier = Modifier
+            .fillMaxSize()
+            .background(Brush.verticalGradient(bgColors))
+            .systemBarsPadding()
     ) {
         // Wavy Background
         Canvas(modifier = Modifier.fillMaxSize()) {
-            val topGradient = Brush.linearGradient(
-                colors = listOf(Color(0xFF4ADE80), Color(0xFF16A34A)) // Light Green to Green
-            )
-            val bottomGradient = Brush.linearGradient(
-                colors = listOf(Color(0xFF22C55E), Color(0xFF14532D)) // Green to Dark Green
-            )
-            
-            drawRect(brush = topGradient)
-            
             val path = Path().apply {
                 moveTo(0f, size.height * 0.45f)
                 cubicTo(
@@ -313,6 +314,9 @@ internal fun LoginScreen(repository: RentalRepository, onLoggedIn: (UserSession)
                 lineTo(0f, size.height)
                 close()
             }
+            val bottomGradient = Brush.linearGradient(
+                colors = listOf(Color(0xFF22C55E), Color(0xFF14532D))
+            )
             drawPath(path = path, brush = bottomGradient)
         }
 
@@ -602,10 +606,15 @@ internal fun LoginScreen(repository: RentalRepository, onLoggedIn: (UserSession)
                             }) {
                                 drawRect(
                                     brush = Brush.sweepGradient(
-                                        colors = listOf(Color.Transparent, Color(0xFF34D399), Color.White, Color(0xFF34D399), Color.Transparent)
-                                        ),
-                                        blendMode = BlendMode.SrcIn
-                                    )
+                                        0.0f to Color.Transparent,
+                                        0.05f to Color(0xFF34D399),
+                                        0.1f to Color.White,
+                                        0.15f to Color(0xFF34D399),
+                                        0.2f to Color.Transparent,
+                                        1.0f to Color.Transparent
+                                    ),
+                                    blendMode = BlendMode.SrcIn
+                                )
                                 }
                             }
                         }
