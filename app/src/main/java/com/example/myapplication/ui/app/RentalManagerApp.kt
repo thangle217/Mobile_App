@@ -6,12 +6,15 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.CutCornerShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Person
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -21,8 +24,10 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import com.example.myapplication.data.local.SessionStore
 import com.example.myapplication.data.repository.RentalRepository
 import com.example.myapplication.domain.model.AccountProfile
@@ -33,6 +38,13 @@ import com.example.myapplication.domain.model.UiState
 import com.example.myapplication.domain.model.UserRole
 import com.example.myapplication.domain.model.UserSession
 import kotlinx.coroutines.launch
+
+private val AppGreenDark  = Color(0xFF064E3B)
+private val AppGreenMid   = Color(0xFF0F766E)
+private val AppGreenLight = Color(0xFF34D399)
+private val AppBgGradient = Brush.verticalGradient(listOf(Color(0xFF0F766E), Color(0xFF064E3B)))
+private val AppCardBg     = Color.White.copy(alpha = 0.15f)
+private val AppCardBorder = Color.White.copy(alpha = 0.28f)
 
 @Composable
 fun RentalManagerApp() {
@@ -95,41 +107,48 @@ internal fun MainShell(
     ModalNavigationDrawer(
         drawerState = drawerState,
         drawerContent = {
-            ModalDrawerSheet {
-                Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                    Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(vertical = 8.dp)) {
-                        AppLogo(size = 40)
+            ModalDrawerSheet(
+                drawerContainerColor = AppGreenDark,
+                drawerContentColor = Color.White
+            ) {
+                Column(modifier = Modifier.background(AppBgGradient).fillMaxHeight().padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                    Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(vertical = 12.dp)) {
+                        AppLogo(size = 44)
                         Spacer(Modifier.width(12.dp))
                         Column {
-                            Text(session?.displayName ?: role.label, fontWeight = FontWeight.Bold, color = Color(0xFF1E293B), style = MaterialTheme.typography.bodyLarge)
-                            Text(role.label, color = Color(0xFF64748B), style = MaterialTheme.typography.bodySmall)
+                            Text(session?.displayName ?: role.label, fontWeight = FontWeight.Bold, color = Color.White, fontSize = 15.sp)
+                            Text(role.label, color = AppGreenLight, fontSize = 12.sp)
                         }
                     }
-                    Divider(color = Color(0xFFE2E8F0))
+                    Box(Modifier.fillMaxWidth().height(1.dp).background(AppGreenLight.copy(alpha = 0.25f)))
                     LazyColumn(verticalArrangement = Arrangement.spacedBy(4.dp)) {
                         items(screens) { item ->
-                            NavigationDrawerItem(
-                                label = { Text(item.label, fontWeight = FontWeight.Medium) },
-                                selected = item == screen,
-                                onClick = {
-                                    onScreenChange(item)
-                                    scope.launch { drawerState.close() }
-                                },
-                                badge = {
-                                    Surface(
-                                        color = screenAccent(item).copy(alpha = 0.12f),
-                                        shape = RoundedCornerShape(6.dp)
-                                    ) {
+                            val active = item == screen
+                            val accent = screenAccent(item)
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clip(CutCornerShape(10.dp))
+                                    .background(if (active) AppGreenLight.copy(alpha = 0.18f) else Color.Transparent)
+                                    .border(1.dp, if (active) AppGreenLight.copy(alpha = 0.5f) else Color.Transparent, CutCornerShape(10.dp))
+                                    .clickable {
+                                        onScreenChange(item)
+                                        scope.launch { drawerState.close() }
+                                    }
+                                    .padding(horizontal = 12.dp, vertical = 10.dp),
+                                contentAlignment = Alignment.CenterStart
+                            ) {
+                                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                                    Surface(shape = CutCornerShape(6.dp), color = accent.copy(alpha = if (active) 0.3f else 0.15f)) {
                                         Text(
-                                            text = item.shortCode,
-                                            color = screenAccent(item),
-                                            style = MaterialTheme.typography.labelSmall,
-                                            fontWeight = FontWeight.Bold,
-                                            modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                                            item.shortCode, color = if (active) AppGreenLight else Color.White.copy(alpha = 0.7f),
+                                            fontWeight = FontWeight.ExtraBold, fontSize = 10.sp,
+                                            modifier = Modifier.padding(horizontal = 6.dp, vertical = 3.dp)
                                         )
                                     }
+                                    Text(item.label, color = if (active) Color.White else Color.White.copy(alpha = 0.75f), fontWeight = if (active) FontWeight.Bold else FontWeight.Normal, fontSize = 13.sp)
                                 }
-                            )
+                            }
                         }
                     }
                 }
@@ -151,7 +170,8 @@ internal fun MainShell(
                     selected = screen,
                     onSelected = onScreenChange
                 )
-            }
+            },
+            containerColor = AppGreenDark
         ) { padding ->
             Box(modifier = Modifier.padding(padding)) {
                 when (screen) {
@@ -227,39 +247,35 @@ internal fun ModuleScreen(
         LazyColumn(
             modifier = Modifier
                 .fillMaxSize()
-                .background(Brush.verticalGradient(listOf(Color(0xFFF8FAFC), Color(0xFFF1F5F9))))
+                .background(AppBgGradient)
                 .padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(14.dp)
         ) {
             item { ModuleHeader(screen, items.size, source) }
             if (canManage) item {
-                Button(
-                    onClick = {
-                        actionError = null
-                        if (screen == AppScreen.Contracts) {
-                            contractEditing = RentalItem("", "", "Chờ người thuê xác nhận", "", "")
-                        } else if (screen == AppScreen.Notices) {
-                            noticeFormOpen = true
-                        } else {
-                            editing = RentalItem(
-                                id = "",
-                                title = "",
-                                status = defaultStatus(screen),
-                                value = "",
-                                note = ""
-                            )
-                        }
-                    },
-                    modifier = Modifier.fillMaxWidth().height(48.dp),
-                    shape = RoundedCornerShape(12.dp),
-                    colors = ButtonDefaults.buttonColors(containerColor = screenAccent(screen)),
-                    elevation = ButtonDefaults.buttonElevation(defaultElevation = 2.dp)
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(52.dp)
+                        .clip(CutCornerShape(14.dp))
+                        .background(Brush.horizontalGradient(listOf(AppGreenMid, Color(0xFF0369A1))))
+                        .clickable {
+                            actionError = null
+                            if (screen == AppScreen.Contracts) {
+                                contractEditing = RentalItem("", "", "Chờ người thuê xác nhận", "", "")
+                            } else if (screen == AppScreen.Notices) {
+                                noticeFormOpen = true
+                            } else {
+                                editing = RentalItem(id = "", title = "", status = defaultStatus(screen), value = "", note = "")
+                            }
+                        },
+                    contentAlignment = Alignment.Center
                 ) {
-                    Text("Thêm ${screen.label.lowercase()}", color = Color.White, fontWeight = FontWeight.Bold, style = MaterialTheme.typography.bodyMedium)
+                    Text("+ Thêm ${screen.label.lowercase()}", color = Color.White, fontWeight = FontWeight.Bold, letterSpacing = 1.sp)
                 }
             }
             actionError?.let {
-                item { Text(it, color = Color(0xFFEF4444), style = MaterialTheme.typography.bodySmall) }
+                item { Text(it, color = Color(0xFFFCA5A5), style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.Medium) }
             }
             if (items.isNotEmpty()) {
                 item {
@@ -445,22 +461,23 @@ internal fun ModuleScreen(
     confirmData?.let {
         AlertDialog(
             onDismissRequest = { confirmData = null },
-            shape = RoundedCornerShape(16.dp),
-            title = { Text(it.title, fontWeight = FontWeight.Bold, color = Color(0xFF1E293B)) },
-            text = { Text(it.message, color = Color(0xFF475569)) },
+            title = { Text(it.title, fontWeight = FontWeight.Bold, color = Color.White) },
+            text = { Text(it.message, color = Color.White.copy(alpha = 0.8f)) },
             confirmButton = {
-                Button(
-                    onClick = {
-                        it.onConfirm()
-                        confirmData = null
-                    },
-                    shape = RoundedCornerShape(8.dp),
-                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF7C3AED))
-                ) { Text("Xác nhận", fontWeight = FontWeight.Bold) }
+                Box(
+                    modifier = Modifier
+                        .clip(CutCornerShape(10.dp))
+                        .background(Brush.horizontalGradient(listOf(AppGreenMid, Color(0xFF0369A1))))
+                        .clickable { it.onConfirm(); confirmData = null }
+                        .padding(horizontal = 20.dp, vertical = 10.dp)
+                ) { Text("Xác nhận", color = Color.White, fontWeight = FontWeight.Bold) }
             },
             dismissButton = {
-                TextButton(onClick = { confirmData = null }) { Text("Hủy") }
-            }
+                TextButton(onClick = { confirmData = null }) { Text("Hủy", color = AppGreenLight) }
+            },
+            containerColor = AppGreenDark,
+            titleContentColor = Color.White,
+            shape = CutCornerShape(20.dp)
         )
     }
 
@@ -693,60 +710,62 @@ internal fun AccountScreen(
         LazyColumn(
             modifier = Modifier
                 .fillMaxSize()
-                .background(Brush.verticalGradient(listOf(Color(0xFFF8FAFC), Color(0xFFF1F5F9))))
+                .background(AppBgGradient)
                 .padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
             item {
-                Card(
-                    shape = RoundedCornerShape(16.dp),
-                    colors = CardDefaults.cardColors(containerColor = Color.White),
-                    border = BorderStroke(1.dp, Color(0xFFF1F5F9)),
-                    elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
-                    modifier = Modifier.fillMaxWidth()
+                Column(
+                    modifier = Modifier
+                        .clip(CutCornerShape(24.dp))
+                        .background(AppCardBg)
+                        .border(1.dp, AppCardBorder, CutCornerShape(24.dp))
+                        .padding(20.dp),
+                    verticalArrangement = Arrangement.spacedBy(14.dp)
                 ) {
-                    Column(modifier = Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            AppLogo(size = 48)
-                            Spacer(Modifier.width(16.dp))
-                            Column(modifier = Modifier.weight(1f)) {
-                                Text("Hồ sơ cá nhân", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold, color = Color(0xFF1E293B))
-                                Text(profile.role.label, color = Color(0xFF64748B), style = MaterialTheme.typography.bodyMedium)
-                            }
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        AppLogo(size = 48)
+                        Spacer(Modifier.width(16.dp))
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text("Hồ sơ cá nhân", fontSize = 17.sp, fontWeight = FontWeight.Bold, color = Color.White)
+                            Text(profile.role.label, color = AppGreenLight, fontSize = 12.sp)
                         }
-                        message?.let { Text(it, color = Color(0xFF10B981), style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.Medium) }
-                        error?.let { Text(it, color = Color(0xFFEF4444), style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.Medium) }
-                        
-                        Divider(color = Color(0xFFF1F5F9))
+                    }
+                    message?.let { Text(it, color = AppGreenLight, fontSize = 12.sp, fontWeight = FontWeight.Medium) }
+                    error?.let { Text(it, color = Color(0xFFFCA5A5), fontSize = 12.sp, fontWeight = FontWeight.Medium) }
+                    Box(Modifier.fillMaxWidth().height(1.dp).background(AppGreenLight.copy(alpha = 0.25f)))
 
-                        if (editing) {
-                            ProfileEditor(
-                                profile = draft,
-                                onChange = { draft = it },
-                                onPickFront = { frontPicker.launch("image/*") },
-                                onPickBack = { backPicker.launch("image/*") }
-                            )
-                        } else {
-                            listOf(
-                                "Họ tên" to profile.fullName,
-                                "Tên đăng nhập" to profile.username,
-                                "Email" to profile.email,
-                                "Số điện thoại" to profile.phone,
-                                "CCCD" to profile.cccd,
-                                "Địa chỉ" to profile.address,
-                                "Ngân hàng" to profile.bankName,
-                                "Số tài khoản" to profile.bankAccount
-                            ).forEach { DetailRow(it.first, it.second.ifBlank { "Chưa cập nhật" }) }
-                        }
-                        
-                        Divider(color = Color(0xFFF1F5F9))
+                    if (editing) {
+                        ProfileEditor(
+                            profile = draft,
+                            onChange = { draft = it },
+                            onPickFront = { frontPicker.launch("image/*") },
+                            onPickBack = { backPicker.launch("image/*") }
+                        )
+                    } else {
+                        listOf(
+                            "Họ tên" to profile.fullName,
+                            "Tên đăng nhập" to profile.username,
+                            "Email" to profile.email,
+                            "Số điện thoại" to profile.phone,
+                            "CCCD" to profile.cccd,
+                            "Địa chỉ" to profile.address,
+                            "Ngân hàng" to profile.bankName,
+                            "Số tài khoản" to profile.bankAccount
+                        ).forEach { DetailRow(it.first, it.second.ifBlank { "Chưa cập nhật" }) }
+                    }
 
-                        Row(horizontalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.fillMaxWidth()) {
-                            Button(
-                                enabled = !saving,
-                                onClick = {
+                    Box(Modifier.fillMaxWidth().height(1.dp).background(AppGreenLight.copy(alpha = 0.25f)))
+
+                    Row(horizontalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.fillMaxWidth()) {
+                        Box(
+                            modifier = Modifier
+                                .weight(1f).height(48.dp)
+                                .clip(CutCornerShape(12.dp))
+                                .background(if (!saving) Brush.horizontalGradient(listOf(AppGreenMid, Color(0xFF0369A1))) else Brush.horizontalGradient(listOf(Color.Gray, Color.Gray)))
+                                .clickable(enabled = !saving) {
                                     if (editing) {
-                                        val currentSession = session ?: return@Button
+                                        val currentSession = session ?: return@clickable
                                         saving = true
                                         scope.launch {
                                             repository.updateAccount(currentSession, draft)
@@ -760,30 +779,27 @@ internal fun AccountScreen(
                                             saving = false
                                         }
                                     } else {
-                                        editing = true
-                                        message = null
-                                        error = null
+                                        editing = true; message = null; error = null
                                     }
                                 },
-                                shape = RoundedCornerShape(10.dp),
-                                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF7C3AED)),
-                                modifier = Modifier.weight(1f).height(44.dp)
-                            ) { Text(if (editing) "Lưu hồ sơ" else "Cập nhật", fontWeight = FontWeight.Bold) }
-                            
-                            OutlinedButton(
-                                onClick = { changingPassword = true },
-                                shape = RoundedCornerShape(10.dp),
-                                modifier = Modifier.weight(1f).height(44.dp)
-                            ) {
-                                Text("Đổi mật khẩu", fontWeight = FontWeight.Bold)
-                            }
-                        }
-                        if (editing) {
-                            TextButton(
-                                onClick = { editing = false; draft = profile },
-                                modifier = Modifier.fillMaxWidth()
-                            ) { Text("Hủy chỉnh sửa", color = Color(0xFF64748B), fontWeight = FontWeight.Medium) }
-                        }
+                            contentAlignment = Alignment.Center
+                        ) { Text(if (editing) "Lưu hồ sơ" else "Cập nhật", color = Color.White, fontWeight = FontWeight.Bold) }
+
+                        Box(
+                            modifier = Modifier
+                                .weight(1f).height(48.dp)
+                                .clip(CutCornerShape(12.dp))
+                                .background(Color.White.copy(alpha = 0.15f))
+                                .border(1.dp, AppGreenLight.copy(alpha = 0.5f), CutCornerShape(12.dp))
+                                .clickable { changingPassword = true },
+                            contentAlignment = Alignment.Center
+                        ) { Text("Đổi mật khẩu", color = AppGreenLight, fontWeight = FontWeight.Bold) }
+                    }
+                    if (editing) {
+                        TextButton(
+                            onClick = { editing = false; draft = profile },
+                            modifier = Modifier.fillMaxWidth()
+                        ) { Text("Hủy chỉnh sửa", color = Color.White.copy(alpha = 0.6f), fontWeight = FontWeight.Medium) }
                     }
                 }
             }
@@ -848,40 +864,25 @@ internal fun ProfileEditor(
 
 @Composable
 internal fun ModuleHeader(screen: AppScreen, count: Int, source: DataSource) {
+    val accent = screenAccent(screen)
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(vertical = 8.dp),
+            .clip(CutCornerShape(14.dp))
+            .background(AppCardBg)
+            .border(1.dp, accent.copy(alpha = 0.4f), CutCornerShape(14.dp))
+            .padding(horizontal = 16.dp, vertical = 12.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        val accent = screenAccent(screen)
-        Surface(
-            shape = RoundedCornerShape(12.dp),
-            color = accent.copy(alpha = 0.12f),
-            modifier = Modifier.size(48.dp)
-        ) {
+        Surface(shape = CutCornerShape(10.dp), color = accent.copy(alpha = 0.2f), modifier = Modifier.size(44.dp)) {
             Box(contentAlignment = Alignment.Center) {
-                Text(
-                    text = screen.shortCode,
-                    color = accent,
-                    fontWeight = FontWeight.ExtraBold,
-                    style = MaterialTheme.typography.titleMedium
-                )
+                Text(screen.shortCode, color = accent, fontWeight = FontWeight.ExtraBold, fontSize = 14.sp)
             }
         }
-        Spacer(Modifier.width(16.dp))
+        Spacer(Modifier.width(14.dp))
         Column(modifier = Modifier.weight(1f)) {
-            Text(
-                text = screen.label,
-                style = MaterialTheme.typography.titleLarge,
-                fontWeight = FontWeight.ExtraBold,
-                color = Color(0xFF1E293B)
-            )
-            Text(
-                text = "$count bản ghi • ${sourceLabel(source)}",
-                color = Color(0xFF64748B),
-                style = MaterialTheme.typography.bodyMedium
-            )
+            Text(screen.label, fontSize = 16.sp, fontWeight = FontWeight.ExtraBold, color = Color.White)
+            Text("$count bản ghi • ${sourceLabel(source)}", color = AppGreenLight.copy(alpha = 0.8f), fontSize = 11.sp)
         }
     }
 }
@@ -894,29 +895,41 @@ internal fun SearchPanel(
     status: String,
     onStatusChange: (String) -> Unit
 ) {
-    Card(
-        shape = RoundedCornerShape(16.dp),
-        colors = CardDefaults.cardColors(containerColor = Color.White),
-        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
-        border = BorderStroke(1.dp, Color(0xFFF1F5F9))
+    Column(
+        modifier = Modifier
+            .clip(CutCornerShape(16.dp))
+            .background(AppCardBg)
+            .border(1.dp, AppCardBorder, CutCornerShape(16.dp))
+            .padding(14.dp),
+        verticalArrangement = Arrangement.spacedBy(10.dp)
     ) {
-        Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-            OutlinedTextField(
-                value = query,
-                onValueChange = onQueryChange,
-                label = { Text("Tìm kiếm theo từ khóa...") },
-                modifier = Modifier.fillMaxWidth(),
-                singleLine = true,
-                shape = RoundedCornerShape(12.dp)
+        OutlinedTextField(
+            value = query,
+            onValueChange = onQueryChange,
+            label = { Text("Tìm kiếm...", color = Color.White.copy(alpha = 0.6f)) },
+            modifier = Modifier.fillMaxWidth(),
+            singleLine = true,
+            shape = CutCornerShape(10.dp),
+            colors = OutlinedTextFieldDefaults.colors(
+                focusedTextColor = Color.White,
+                unfocusedTextColor = Color.White,
+                focusedBorderColor = AppGreenLight,
+                unfocusedBorderColor = Color.White.copy(alpha = 0.3f),
+                cursorColor = AppGreenLight
             )
-            LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                items(statuses) { item ->
-                    FilterChip(
-                        selected = status == item,
-                        onClick = { onStatusChange(item) },
-                        label = { Text(item) },
-                        shape = RoundedCornerShape(8.dp)
-                    )
+        )
+        LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            items(statuses) { item ->
+                val active = status == item
+                Box(
+                    modifier = Modifier
+                        .clip(CutCornerShape(8.dp))
+                        .background(if (active) AppGreenLight.copy(alpha = 0.2f) else Color.Transparent)
+                        .border(1.dp, if (active) AppGreenLight else Color.White.copy(alpha = 0.3f), CutCornerShape(8.dp))
+                        .clickable { onStatusChange(item) }
+                        .padding(horizontal = 12.dp, vertical = 6.dp)
+                ) {
+                    Text(item, color = if (active) AppGreenLight else Color.White.copy(alpha = 0.7f), fontSize = 12.sp, fontWeight = if (active) FontWeight.Bold else FontWeight.Normal)
                 }
             }
         }
@@ -931,106 +944,80 @@ internal fun RentalListCard(
     onEdit: () -> Unit,
     onDelete: () -> Unit
 ) {
-    Card(
-        modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(16.dp),
-        colors = CardDefaults.cardColors(containerColor = Color.White),
-        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
-        border = BorderStroke(1.dp, Color(0xFFF1F5F9))
+    val accent = statusColor(item.status)
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(CutCornerShape(16.dp))
+            .background(AppCardBg)
+            .border(1.dp, accent.copy(alpha = 0.35f), CutCornerShape(16.dp))
+            .padding(14.dp),
+        verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
-        Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Box(
+                Modifier.size(width = 4.dp, height = 48.dp)
+                    .clip(RoundedCornerShape(4.dp))
+                    .background(accent)
+            )
+            Spacer(Modifier.width(10.dp))
+            Surface(shape = CutCornerShape(10.dp), color = accent.copy(alpha = 0.15f), modifier = Modifier.size(42.dp)) {
+                Box(contentAlignment = Alignment.Center) {
+                    Text(item.id.takeLast(3), color = accent, fontWeight = FontWeight.ExtraBold, fontSize = 13.sp)
+                }
+            }
+            Spacer(Modifier.width(12.dp))
+            Column(modifier = Modifier.weight(1f)) {
+                Text(item.title, fontWeight = FontWeight.Bold, color = Color.White, maxLines = 1, overflow = TextOverflow.Ellipsis, fontSize = 14.sp)
+                Text(item.id, color = AppGreenLight.copy(alpha = 0.7f), fontSize = 11.sp)
+            }
+            StatusPill(item.status)
+        }
+
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clip(CutCornerShape(10.dp))
+                .background(Color.White.copy(alpha = 0.08f))
+                .padding(10.dp)
+        ) {
+            Column(verticalArrangement = Arrangement.spacedBy(3.dp)) {
+                Text(item.value, fontWeight = FontWeight.Bold, color = Color.White, fontSize = 13.sp)
+                if (item.note.isNotBlank()) {
+                    Text(item.note, color = Color.White.copy(alpha = 0.6f), fontSize = 12.sp, maxLines = 2, overflow = TextOverflow.Ellipsis)
+                }
+            }
+        }
+
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
+            Box(
+                modifier = Modifier
+                    .weight(1f).height(40.dp)
+                    .clip(CutCornerShape(10.dp))
+                    .background(accent.copy(alpha = 0.25f))
+                    .border(1.dp, accent.copy(alpha = 0.5f), CutCornerShape(10.dp))
+                    .clickable { onOpen() },
+                contentAlignment = Alignment.Center
+            ) { Text("Chi tiết", color = accent, fontWeight = FontWeight.Bold, fontSize = 12.sp) }
+            if (canManage) {
                 Box(
-                    Modifier
-                        .size(width = 4.dp, height = 48.dp)
-                        .clip(RoundedCornerShape(8.dp))
-                        .background(statusColor(item.status))
-                )
-                Spacer(Modifier.width(12.dp))
-                Surface(
-                    shape = RoundedCornerShape(12.dp),
-                    color = statusColor(item.status).copy(alpha = 0.1f),
-                    modifier = Modifier.size(44.dp)
-                ) {
-                    Box(contentAlignment = Alignment.Center) {
-                        Text(
-                            item.id.takeLast(3),
-                            color = statusColor(item.status),
-                            fontWeight = FontWeight.ExtraBold,
-                            style = MaterialTheme.typography.titleMedium
-                        )
-                    }
-                }
-                Spacer(Modifier.width(14.dp))
-                Column(modifier = Modifier.weight(1f)) {
-                    Text(
-                        item.title,
-                        fontWeight = FontWeight.Bold,
-                        color = Color(0xFF1E293B),
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                        style = MaterialTheme.typography.bodyLarge
-                    )
-                    Text(
-                        item.id,
-                        color = Color(0xFF64748B),
-                        style = MaterialTheme.typography.bodySmall
-                    )
-                }
-                StatusPill(item.status)
-            }
-            
-            Surface(
-                shape = RoundedCornerShape(12.dp),
-                color = Color(0xFFF8FAFC),
-                border = BorderStroke(1.dp, Color(0xFFF1F5F9))
-            ) {
-                Column(modifier = Modifier.fillMaxWidth().padding(12.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                    Text(
-                        text = item.value,
-                        fontWeight = FontWeight.Bold,
-                        color = Color(0xFF1E293B),
-                        style = MaterialTheme.typography.bodyMedium
-                    )
-                    if (item.note.isNotBlank()) {
-                        Text(
-                            text = item.note,
-                            color = Color(0xFF64748B),
-                            style = MaterialTheme.typography.bodySmall,
-                            maxLines = 2,
-                            overflow = TextOverflow.Ellipsis
-                        )
-                    }
-                }
-            }
-            
-            Row(horizontalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.fillMaxWidth()) {
-                Button(
-                    onClick = onOpen,
-                    shape = RoundedCornerShape(10.dp),
-                    colors = ButtonDefaults.buttonColors(containerColor = statusColor(item.status)),
-                    modifier = Modifier.weight(1f).height(44.dp)
-                ) {
-                    Text("Chi tiết", color = Color.White, fontWeight = FontWeight.Bold)
-                }
-                if (canManage) {
-                    OutlinedButton(
-                        onClick = onEdit,
-                        shape = RoundedCornerShape(10.dp),
-                        modifier = Modifier.weight(1f).height(44.dp)
-                    ) {
-                        Text("Sửa", fontWeight = FontWeight.Bold)
-                    }
-                    OutlinedButton(
-                        onClick = onDelete,
-                        shape = RoundedCornerShape(10.dp),
-                        colors = ButtonDefaults.outlinedButtonColors(contentColor = Color(0xFFEF4444)),
-                        border = BorderStroke(1.dp, Color(0xFFFEE2E2)),
-                        modifier = Modifier.weight(1f).height(44.dp)
-                    ) {
-                        Text("Xóa", fontWeight = FontWeight.Bold)
-                    }
-                }
+                    modifier = Modifier
+                        .weight(1f).height(40.dp)
+                        .clip(CutCornerShape(10.dp))
+                        .background(Color.White.copy(alpha = 0.1f))
+                        .border(1.dp, Color.White.copy(alpha = 0.3f), CutCornerShape(10.dp))
+                        .clickable { onEdit() },
+                    contentAlignment = Alignment.Center
+                ) { Text("Sửa", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 12.sp) }
+                Box(
+                    modifier = Modifier
+                        .weight(1f).height(40.dp)
+                        .clip(CutCornerShape(10.dp))
+                        .background(Color(0xFFF87171).copy(alpha = 0.15f))
+                        .border(1.dp, Color(0xFFF87171).copy(alpha = 0.4f), CutCornerShape(10.dp))
+                        .clickable { onDelete() },
+                    contentAlignment = Alignment.Center
+                ) { Text("Xóa", color = Color(0xFFF87171), fontWeight = FontWeight.Bold, fontSize = 12.sp) }
             }
         }
     }
@@ -1071,24 +1058,24 @@ internal fun ModuleActionBar(
         && !showPayInvoice && !showPaymentDecision && !showRespondIncident && !showMarkRead) return
 
     Surface(
-        shape = RoundedCornerShape(16.dp),
-        color = Color.White,
-        border = BorderStroke(1.dp, Color(0xFFF1F5F9)),
+        shape = CutCornerShape(14.dp),
+        color = AppCardBg,
+        border = BorderStroke(1.dp, AppCardBorder),
         shadowElevation = 2.dp
     ) {
         Row(
-            modifier = Modifier.fillMaxWidth().padding(12.dp),
-            horizontalArrangement = Arrangement.spacedBy(10.dp)
+            modifier = Modifier.fillMaxWidth().padding(10.dp),
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
         ) {
             if (showRent) {
-                Button(
-                    onClick = onRentRoom,
-                    shape = RoundedCornerShape(10.dp),
-                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF0F766E)),
-                    modifier = Modifier.fillMaxWidth().height(44.dp)
-                ) {
-                    Text("Gửi yêu cầu thuê", color = Color.White, fontWeight = FontWeight.Bold)
-                }
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth().height(44.dp)
+                        .clip(CutCornerShape(10.dp))
+                        .background(Brush.horizontalGradient(listOf(AppGreenMid, Color(0xFF0369A1))))
+                        .clickable { onRentRoom() },
+                    contentAlignment = Alignment.Center
+                ) { Text("Gửi yêu cầu thuê", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 13.sp) }
             }
             if (showDecision) {
                 Button(
