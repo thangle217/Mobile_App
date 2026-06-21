@@ -16,7 +16,18 @@ class RentalRepository(context: Context) : IRentalRepository {
     private val store = CloudDataSource()
 
     override suspend fun login(username: String, password: String, role: UserRole): Result<UserSession> = runCatching {
-        store.login(username, password, role)
+        try {
+            store.login(username, password, role)
+        } catch (e: Exception) {
+            val msg = e.message ?: ""
+            if (msg.contains("incorrect, malformed or has expired", ignoreCase = true) || msg.contains("INVALID_LOGIN_CREDENTIALS", ignoreCase = true)) {
+                throw Exception("Sai mật khẩu hoặc tài khoản không tồn tại.")
+            } else if (msg.contains("badly formatted", ignoreCase = true)) {
+                throw Exception("Email không đúng định dạng.")
+            } else {
+                throw e
+            }
+        }
     }
 
     override suspend fun register(payload: JSONObject): Result<String> = runCatching {

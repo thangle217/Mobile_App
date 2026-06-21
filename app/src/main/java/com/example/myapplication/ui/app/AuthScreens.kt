@@ -22,6 +22,12 @@ import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Phone
 import androidx.compose.material.icons.filled.Email
 import androidx.compose.material.icons.filled.Info
+import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.*
 import androidx.compose.ui.graphics.vector.path
@@ -422,21 +428,11 @@ internal fun LoginScreen(repository: RentalRepository, onLoggedIn: (UserSession)
                                 value = email,
                                 onValueChange = { email = it },
                                 placeholder = "Email đã đăng ký",
-                                leadingIcon = Icons.Default.Email,
-                                enabled = forgotPasswordStep == 1
+                                leadingIcon = Icons.Default.Email
                             )
                         }
 
-                        if (currentMode == AuthMode.Forgot && forgotPasswordStep == 2) {
-                            HexTextField(
-                                value = otp,
-                                onValueChange = { otp = it },
-                                placeholder = "Mã OTP (123456)",
-                                leadingIcon = Icons.Default.Lock
-                            )
-                        }
-
-                        if (currentMode != AuthMode.Forgot || forgotPasswordStep == 2) {
+                        if (currentMode != AuthMode.Forgot) {
                             HexTextField(
                                 value = password,
                                 onValueChange = { password = it },
@@ -454,7 +450,7 @@ internal fun LoginScreen(repository: RentalRepository, onLoggedIn: (UserSession)
                             )
                         }
 
-                        if (currentMode == AuthMode.Register || (currentMode == AuthMode.Forgot && forgotPasswordStep == 2)) {
+                        if (currentMode == AuthMode.Register) {
                             HexTextField(
                                 value = confirmPassword,
                                 onValueChange = { confirmPassword = it },
@@ -502,22 +498,12 @@ internal fun LoginScreen(repository: RentalRepository, onLoggedIn: (UserSession)
                                                 mode = AuthMode.Login
                                             }.onFailure { error = it.message ?: "Không thể đăng ký." }
                                             AuthMode.Forgot -> {
-                                                if (forgotPasswordStep == 1) {
-                                                    repository.forgotPassword(email)
-                                                        .onSuccess {
-                                                            message = it
-                                                            forgotPasswordStep = 2
-                                                        }
-                                                        .onFailure { error = it.message ?: "Không thể gửi OTP." }
-                                                } else {
-                                                    repository.resetPassword(email, otp, password, confirmPassword)
-                                                        .onSuccess {
-                                                            message = it
-                                                            mode = AuthMode.Login
-                                                            forgotPasswordStep = 1
-                                                        }
-                                                        .onFailure { error = it.message ?: "Đặt lại mật khẩu thất bại." }
-                                                }
+                                                repository.forgotPassword(email)
+                                                    .onSuccess {
+                                                        message = it
+                                                        mode = AuthMode.Login
+                                                    }
+                                                    .onFailure { error = it.message ?: "Không thể gửi link khôi phục." }
                                             }
                                             AuthMode.Reset -> {} 
                                         }
@@ -527,7 +513,7 @@ internal fun LoginScreen(repository: RentalRepository, onLoggedIn: (UserSession)
                             contentAlignment = Alignment.Center
                         ) {
                             Text(
-                                text = (if (loading) "ĐANG XỬ LÝ..." else if (currentMode == AuthMode.Forgot && forgotPasswordStep == 1) "GỬI OTP" else if (currentMode == AuthMode.Forgot && forgotPasswordStep == 2) "ĐẶT LẠI MẬT KHẨU" else currentMode.action.uppercase()).uppercase(),
+                                text = (if (loading) "ĐANG XỬ LÝ..." else if (currentMode == AuthMode.Forgot) "GỬI LINK KHÔI PHỤC" else currentMode.action.uppercase()).uppercase(),
                                 color = Color.White,
                                 fontWeight = FontWeight.Bold,
                                 letterSpacing = 2.sp
@@ -548,7 +534,7 @@ internal fun LoginScreen(repository: RentalRepository, onLoggedIn: (UserSession)
                                         colors = CheckboxDefaults.colors(checkedColor = Color(0xFF0F766E), checkmarkColor = Color.White, uncheckedColor = Color.White.copy(alpha = 0.5f)),
                                         modifier = Modifier.padding(end = 4.dp).offset(x = (-8).dp)
                                     )
-                                    Text("Lưu tài khoản", color = Color.White, fontSize = 14.sp, maxLines = 1)
+                                    Text("Lưu tài khoản", color = Color.White, fontSize = 14.sp, maxLines = 1, modifier = Modifier.offset(x = (-8).dp))
                                 }
                                 Text(
                                     "Quên mật khẩu?", 
@@ -556,7 +542,7 @@ internal fun LoginScreen(repository: RentalRepository, onLoggedIn: (UserSession)
                                     fontSize = 14.sp,
                                     fontWeight = FontWeight.SemiBold,
                                     maxLines = 1,
-                                    modifier = Modifier.clickable { mode = AuthMode.Forgot; forgotPasswordStep = 1 }
+                                    modifier = Modifier.clickable { mode = AuthMode.Forgot }
                                 )
                             }
                         }
@@ -565,13 +551,6 @@ internal fun LoginScreen(repository: RentalRepository, onLoggedIn: (UserSession)
                             Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(12.dp)) {
                                 if (currentMode == AuthMode.Login) {
                                     Text("Chưa có tài khoản? Đăng ký ngay", color = Color.White, fontSize = 14.sp, fontWeight = FontWeight.Bold, modifier = Modifier.clickable { mode = AuthMode.Register })
-                                    Text("Khởi tạo tài khoản mẫu (Dành cho Dev)", color = Color(0xFF94A3B8), fontSize = 12.sp, textDecoration = TextDecoration.Underline, modifier = Modifier.clickable {
-                                        loading = true
-                                        scope.launch {
-                                            repository.createTestAccounts().onSuccess { message = it }.onFailure { error = it.message }
-                                            loading = false
-                                        }
-                                    })
                                 } else if (currentMode == AuthMode.Register) {
                                     Text("Đã có tài khoản? Đăng nhập", color = Color.White, fontSize = 14.sp, fontWeight = FontWeight.Bold, modifier = Modifier.clickable { mode = AuthMode.Login })
                                 } else if (currentMode == AuthMode.Forgot) {
@@ -583,20 +562,41 @@ internal fun LoginScreen(repository: RentalRepository, onLoggedIn: (UserSession)
                 }
             }
 
-            // Top Hexagon Logo
+            // Top Hexagon Logo Eyecatcher Animation
+            val infiniteTransition = rememberInfiniteTransition(label = "eyecatcher")
+            val offsetY by infiniteTransition.animateFloat(
+                initialValue = 0f,
+                targetValue = -12f,
+                animationSpec = infiniteRepeatable(
+                    animation = tween(1200, easing = FastOutSlowInEasing),
+                    repeatMode = RepeatMode.Reverse
+                ),
+                label = "bounce"
+            )
+            val glowAlpha by infiniteTransition.animateFloat(
+                initialValue = 0.4f,
+                targetValue = 1f,
+                animationSpec = infiniteRepeatable(
+                    animation = tween(1200, easing = FastOutSlowInEasing),
+                    repeatMode = RepeatMode.Reverse
+                ),
+                label = "glow"
+            )
+
             Box(
                 modifier = Modifier
                     .size(80.dp)
                     .align(Alignment.TopCenter)
+                    .offset(y = offsetY.dp)
                     .clip(HexagonShape())
                     .background(Color(0xFF064E3B)) // Dark Green Hexagon
-                    .border(2.dp, Color(0xFF34D399), HexagonShape()),
+                    .border(2.dp, Color(0xFF34D399).copy(alpha = glowAlpha), HexagonShape()),
                 contentAlignment = Alignment.Center
             ) {
                 Icon(
                     imageVector = Icons.Default.Home,
                     contentDescription = "App Logo",
-                    tint = Color.White,
+                    tint = Color.White.copy(alpha = glowAlpha),
                     modifier = Modifier.size(40.dp)
                 )
             }
