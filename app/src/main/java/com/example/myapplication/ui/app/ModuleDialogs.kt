@@ -489,77 +489,73 @@ internal fun ServiceFormDialog(item: RentalItem, onDismiss: () -> Unit, onSave: 
     var status by remember(item) { mutableStateOf(item.status.ifBlank { "Tính phí" }) }
     var error by remember { mutableStateOf<String?>(null) }
 
+    val fieldColors = OutlinedTextFieldDefaults.colors(
+        focusedTextColor = Color.White, unfocusedTextColor = Color.White,
+        focusedBorderColor = Color(0xFF34D399), unfocusedBorderColor = Color.White.copy(alpha = 0.3f),
+        cursorColor = Color(0xFF34D399), focusedLabelColor = Color(0xFF34D399), unfocusedLabelColor = Color.White.copy(alpha = 0.55f)
+    )
+
     AlertDialog(
         onDismissRequest = onDismiss,
-        shape = RoundedCornerShape(16.dp),
-        title = {
-            Text(
-                text = if (item.id.isBlank()) "Thêm dịch vụ" else "Sửa dịch vụ",
-                fontWeight = FontWeight.Bold, color = Color(0xFF1E293B)
-            )
-        },
+        title = { Text(if (item.id.isBlank()) "Thêm dịch vụ" else "Sửa dịch vụ", fontWeight = FontWeight.Bold, color = Color.White) },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                OutlinedTextField(
-                    value = name, onValueChange = { name = it },
-                    label = { Text("Tên dịch vụ * (VD: Internet, Rác...)") },
-                    modifier = Modifier.fillMaxWidth(), singleLine = true,
-                    shape = RoundedCornerShape(8.dp)
-                )
-                OutlinedTextField(
-                    value = unitPrice, onValueChange = { unitPrice = it },
-                    label = { Text("Đơn giá *") },
-                    modifier = Modifier.fillMaxWidth(), singleLine = true,
-                    shape = RoundedCornerShape(8.dp)
-                )
-                Text("Đơn vị tính", style = MaterialTheme.typography.labelMedium, color = Color(0xFF64748B))
+                OutlinedTextField(value = name, onValueChange = { name = it }, label = { Text("Tên dịch vụ * (VD: Internet, Rác...)") }, modifier = Modifier.fillMaxWidth(), singleLine = true, shape = CutCornerShape(8.dp), colors = fieldColors)
+                OutlinedTextField(value = unitPrice, onValueChange = { unitPrice = it }, label = { Text("Đơn giá *") }, modifier = Modifier.fillMaxWidth(), singleLine = true, shape = CutCornerShape(8.dp), colors = fieldColors)
+                Text("Đơn vị tính", style = MaterialTheme.typography.labelMedium, color = Color(0xFF34D399))
                 LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     items(listOf("tháng", "phòng", "người", "kWh", "m3")) { u ->
-                        FilterChip(
-                            selected = unit == u, onClick = { unit = u }, label = { Text(u) },
-                            shape = RoundedCornerShape(8.dp)
-                        )
+                        val active = unit == u
+                        Box(
+                            modifier = Modifier
+                                .clip(CutCornerShape(8.dp))
+                                .background(if (active) Color(0xFF34D399).copy(alpha = 0.2f) else Color.Transparent)
+                                .border(1.dp, if (active) Color(0xFF34D399) else Color.White.copy(alpha = 0.3f), CutCornerShape(8.dp))
+                                .clickable { unit = u }
+                                .padding(horizontal = 12.dp, vertical = 6.dp)
+                        ) { Text(u, color = if (active) Color(0xFF34D399) else Color.White.copy(alpha = 0.7f), fontSize = 12.sp, fontWeight = if (active) FontWeight.Bold else FontWeight.Normal) }
                     }
                 }
-                Text("Trạng thái", style = MaterialTheme.typography.labelMedium, color = Color(0xFF64748B))
+                Text("Trạng thái", style = MaterialTheme.typography.labelMedium, color = Color(0xFF34D399))
                 LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     items(listOf("Tính phí", "Miễn phí", "Tạm dừng")) { s ->
-                        FilterChip(
-                            selected = status == s, onClick = { status = s }, label = { Text(s) },
-                            shape = RoundedCornerShape(8.dp)
-                        )
+                        val active = status == s
+                        Box(
+                            modifier = Modifier
+                                .clip(CutCornerShape(8.dp))
+                                .background(if (active) Color(0xFF34D399).copy(alpha = 0.2f) else Color.Transparent)
+                                .border(1.dp, if (active) Color(0xFF34D399) else Color.White.copy(alpha = 0.3f), CutCornerShape(8.dp))
+                                .clickable { status = s }
+                                .padding(horizontal = 12.dp, vertical = 6.dp)
+                        ) { Text(s, color = if (active) Color(0xFF34D399) else Color.White.copy(alpha = 0.7f), fontSize = 12.sp, fontWeight = if (active) FontWeight.Bold else FontWeight.Normal) }
                     }
                 }
-                OutlinedTextField(
-                    value = note, onValueChange = { note = it },
-                    label = { Text("Ghi chú") },
-                    modifier = Modifier.fillMaxWidth(), minLines = 2,
-                    shape = RoundedCornerShape(8.dp)
-                )
-                error?.let { Text(it, color = Color(0xFFEF4444), style = MaterialTheme.typography.bodySmall) }
+                OutlinedTextField(value = note, onValueChange = { note = it }, label = { Text("Ghi chú") }, modifier = Modifier.fillMaxWidth(), minLines = 2, shape = CutCornerShape(8.dp), colors = fieldColors)
+                error?.let { Text(it, color = Color(0xFFFCA5A5), style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.Medium) }
             }
         },
         confirmButton = {
-            Button(
-                onClick = {
-                    when {
-                        name.isBlank() -> error = "Tên dịch vụ không được để trống."
-                        unitPrice.isBlank() -> error = "Đơn giá không được để trống."
-                        else -> {
-                            val newDetails = item.details.filterNot { it.first == "unit" } + ("unit" to unit)
-                            onSave(item.copy(
-                                title = name.trim(), status = status,
-                                value = unitPrice.trim(), note = note.trim(),
-                                details = newDetails
-                            ))
+            Box(
+                modifier = Modifier
+                    .clip(CutCornerShape(10.dp))
+                    .background(Brush.horizontalGradient(listOf(Color(0xFF0F766E), Color(0xFF0369A1))))
+                    .clickable {
+                        when {
+                            name.isBlank() -> error = "Tên dịch vụ không được để trống."
+                            unitPrice.isBlank() -> error = "Đơn giá không được để trống."
+                            else -> {
+                                val newDetails = item.details.filterNot { it.first == "unit" } + ("unit" to unit)
+                                onSave(item.copy(title = name.trim(), status = status, value = unitPrice.trim(), note = note.trim(), details = newDetails))
+                            }
                         }
                     }
-                },
-                shape = RoundedCornerShape(8.dp),
-                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF14B8A6))
-            ) { Text("Lưu dịch vụ", fontWeight = FontWeight.Bold) }
+                    .padding(horizontal = 20.dp, vertical = 10.dp)
+            ) { Text("Lưu dịch vụ", color = Color.White, fontWeight = FontWeight.Bold) }
         },
-        dismissButton = { TextButton(onClick = onDismiss) { Text("Hủy") } }
+        dismissButton = { TextButton(onClick = onDismiss) { Text("Hủy", color = Color(0xFF34D399)) } },
+        containerColor = Color(0xFF064E3B),
+        titleContentColor = Color.White,
+        shape = CutCornerShape(20.dp)
     )
 }
 
