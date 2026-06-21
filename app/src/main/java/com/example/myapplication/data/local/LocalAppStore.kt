@@ -241,46 +241,51 @@ class LocalAppStore(context: Context) {
             note = if (approve) "${request.note}\nĐã duyệt bởi ${session.displayName}." else "${request.note}\nĐã từ chối bởi ${session.displayName}."
         )
         upsert(AppScreen.RentRequests, nextRequest)
-        if (!approve) return nextRequest
+        return nextRequest
+    }
 
+    fun tenantConfirmRentRequest(requestId: String, session: UserSession): RentalItem {
+        val request = list(AppScreen.RentRequests).firstOrNull { it.id == requestId } ?: error("Không tìm thấy yêu cầu thuê.")
+        require(request.status == "Đã duyệt") { "Yêu cầu thuê chưa được duyệt hoặc đã xử lý xong." }
+        
+        val roomId = request.detail("roomId")
+        val room = list(AppScreen.Rooms).firstOrNull { it.id == roomId } ?: error("Không tìm thấy phòng.")
+        
+        // Cập nhật yêu cầu thuê thành Hoàn tất
+        val completedRequest = request.copy(status = "Hoàn tất")
+        upsert(AppScreen.RentRequests, completedRequest)
+
+        // Tạo hợp đồng
         val contract = RentalItem(
             id = nextId(AppScreen.Contracts),
             title = "Hợp đồng ${room.title} - ${request.detail("tenantName").ifBlank { request.detail("tenantUsername") }}",
-            status = "Chờ người thuê xác nhận",
+            status = "Đang hiệu lực",
             value = request.value,
-            note = "Tạo từ yêu cầu ${request.id}. Người thuê cần xác nhận để hoàn tất.",
+            note = "Tạo tự động từ yêu cầu ${request.id}.",
             details = listOf(
                 "requestId" to request.id,
                 "tenantUsername" to request.detail("tenantUsername"),
                 "tenantName" to request.detail("tenantName"),
                 "roomId" to room.id,
-                "roomName" to room.title
+                "roomName" to room.title,
+                "deposit" to "0",
+                "startDate" to java.text.SimpleDateFormat("dd/MM/yyyy", java.util.Locale.getDefault()).format(java.util.Date())
             )
         )
         upsert(AppScreen.Contracts, contract)
+        
+        // Cập nhật trạng thái phòng
         upsert(
             AppScreen.Rooms,
             room.copy(
-                status = "Đang giữ chỗ",
-                note = "${room.note}\nĐang chờ ${request.detail("tenantName").ifBlank { request.detail("tenantUsername") }} xác nhận hợp đồng.",
+                status = "Đã thuê",
                 details = room.details
                     .replaceDetail("tenantUsername", request.detail("tenantUsername"))
                     .replaceDetail("tenantName", request.detail("tenantName"))
                     .replaceDetail("contractId", contract.id)
             )
         )
-        upsert(
-            AppScreen.Notices,
-            RentalItem(
-                id = nextId(AppScreen.Notices),
-                title = "Hợp đồng đang chờ xác nhận",
-                status = "Mới",
-                value = "Hợp đồng",
-                note = "Yêu cầu thuê ${room.title} đã được duyệt. Vui lòng xác nhận hợp đồng.",
-                details = listOf("targetUser" to request.detail("tenantUsername"), "contractId" to contract.id)
-            )
-        )
-        return nextRequest
+        return contract
     }
 
     fun confirmContract(contractId: String, approve: Boolean, session: UserSession): RentalItem {

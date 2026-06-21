@@ -133,8 +133,13 @@ class RentalRepository(context: Context) : IRentalRepository {
     }
 
     override suspend fun decideRentRequest(requestId: String, approve: Boolean, session: UserSession?): Result<RentalItem> = runCatching {
-        require(session?.role == UserRole.Admin || session?.role == UserRole.ChuTro) { "Chỉ Admin hoặc Chủ trọ được duyệt yêu cầu thuê." }
+        require(session?.role == UserRole.Admin || session?.role == UserRole.ChuTro) { "Chỉ Admin hoặc Chủ trọ mới được duyệt yêu cầu thuê." }
         store.decideRentRequest(requestId, approve, session!!)
+    }
+
+    override suspend fun tenantConfirmRentRequest(requestId: String, session: UserSession?): Result<RentalItem> = runCatching {
+        require(session?.role == UserRole.NguoiDung) { "Chỉ người thuê mới được xác nhận yêu cầu thuê." }
+        store.tenantConfirmRentRequest(requestId, session!!)
     }
 
     override suspend fun confirmContract(contractId: String, approve: Boolean, session: UserSession?): Result<RentalItem> = runCatching {

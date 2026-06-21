@@ -267,9 +267,34 @@ class CloudDataSource {
     }
     suspend fun decideRentRequest(requestId: String, approve: Boolean, session: UserSession): RentalItem {
         val status = if (approve) "Đã duyệt" else "Từ chối"
-        val item = RentalItem(requestId, "Phản hồi YC $requestId", status, "", "", listOf())
+        val reqDoc = db.collection("rentRequests").document(requestId).get().await()
+        val detailsList = reqDoc.get("details") as? List<Map<String, String>> ?: emptyList()
+        val details = detailsList.map { it["key"]!! to it["value"]!! }
+        val item = RentalItem(requestId, reqDoc.getString("title") ?: "", status, reqDoc.getString("value") ?: "", reqDoc.getString("note") ?: "", details)
         upsert(AppScreen.RentRequests, item)
         return item
+    }
+
+    suspend fun tenantConfirmRentRequest(requestId: String, session: UserSession): RentalItem {
+        val reqDoc = db.collection("rentRequests").document(requestId).get().await()
+        require(reqDoc.exists()) { "Không tìm thấy yêu cầu thuê." }
+        
+        val detailsList = reqDoc.get("details") as? List<Map<String, String>> ?: emptyList()
+        val detailsMap = detailsList.associate { it["key"]!! to it["value"]!! }
+        val roomId = detailsMap["roomId"] ?: error("Lỗi dữ liệu: Không có roomId")
+        
+        // Update request status to Hoan tat
+        val updatedRequest = RentalItem(requestId, reqDoc.getString("title") ?: "", "Hoàn tất", reqDoc.getString("value") ?: "", reqDoc.getString("note") ?: "", detailsList.map { it["key"]!! to it["value"]!! })
+        upsert(AppScreen.RentRequests, updatedRequest)
+
+        // Create Contract
+        val contractId = db.collection("contracts").document().id
+        val cal = java.util.Calendar.getInstance()
+        val startDate = String.format("%02d/%02d/%04d", cal.get(java.util.Calendar.DAY_OF_MONTH), cal.get(java.util.Calendar.MONTH) + 1, cal.get(java.util.Calendar.YEAR))
+        cal.add(java.util.Calendar.MONTH, 6) // Default 6 months
+        val endDate = String.format("%02d/%02d/%04d", cal.get(java.util.Calendar.DAY_OF_MONTH), cal.get(java.util.Calendar.MONTH) + 1, cal.get(java.util.Calendar.YEAR))
+        
+        return saveContract(contractId, roomId, session.username, startDate, endDate, "0", "Hợp đồng tự động tạo từ Yêu cầu thuê", "Đang hiệu lực", session)
     }
     suspend fun confirmContract(contractId: String, approve: Boolean, session: UserSession): RentalItem {
         val status = if (approve) "Đang hiệu lực" else "Hủy"

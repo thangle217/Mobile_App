@@ -18,6 +18,7 @@ interface IRentalRepository {
     suspend fun deleteItem(screen: AppScreen, id: String, session: UserSession?): Result<Unit>
     suspend fun requestRoom(roomId: String, session: UserSession?, duration: String, note: String): Result<RentalItem>
     suspend fun decideRentRequest(requestId: String, approve: Boolean, session: UserSession?): Result<RentalItem>
+    suspend fun tenantConfirmRentRequest(requestId: String, session: UserSession?): Result<RentalItem>
     suspend fun confirmContract(contractId: String, approve: Boolean, session: UserSession?): Result<RentalItem>
     suspend fun saveContract(
         contractId: String,

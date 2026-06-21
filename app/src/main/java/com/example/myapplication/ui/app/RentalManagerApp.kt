@@ -358,12 +358,25 @@ internal fun ModuleScreen(
                             onRejectRequest = {
                                 confirmData = ConfirmData(
                                     title = "Từ chối yêu cầu thuê",
-                                    message = "Bạn có chắc chắn muốn từ chối yêu cầu thuê này không?",
+                                    message = "Bạn có chắc chắn muốn từ chối yêu cầu này không?",
                                     onConfirm = {
                                         scope.launch {
                                             repository.decideRentRequest(item.id, approve = false, session = session)
                                                 .onSuccess { load() }
                                                 .onFailure { actionError = it.message ?: "Không thể từ chối yêu cầu." }
+                                        }
+                                    }
+                                )
+                            },
+                            onTenantConfirmRequest = {
+                                confirmData = ConfirmData(
+                                    title = "Xác nhận thuê",
+                                    message = "Khi bạn xác nhận, hệ thống sẽ tự động tạo hợp đồng thuê phòng với giá gốc của phòng. Bạn có đồng ý không?",
+                                    onConfirm = {
+                                        scope.launch {
+                                            repository.tenantConfirmRentRequest(item.id, session = session)
+                                                .onSuccess { load() }
+                                                .onFailure { actionError = it.message ?: "Không thể xác nhận yêu cầu thuê." }
                                         }
                                     }
                                 )
@@ -1106,9 +1119,11 @@ internal fun ModuleActionBar(
     onApprovePayment: () -> Unit = {},
     onRejectPayment: () -> Unit = {},
     onRespondIncident: () -> Unit = {},
-    onMarkNoticeRead: () -> Unit = {}
+    onMarkNoticeRead: () -> Unit = {},
+    onTenantConfirmRequest: () -> Unit = {}
 ) {
     val showRent = role == UserRole.NguoiDung && screen == AppScreen.Rooms && item.status.equals("Còn trống", true)
+    val showTenantConfirmRequest = role == UserRole.NguoiDung && screen == AppScreen.RentRequests && item.status == "Đã duyệt"
     val showDecision = role != UserRole.NguoiDung && screen == AppScreen.RentRequests && item.status.contains("Chờ", true)
     val showConfirm = role == UserRole.NguoiDung && screen == AppScreen.Contracts && item.status == "Chờ người thuê xác nhận"
     val showRenew = role == UserRole.NguoiDung && screen == AppScreen.Contracts && item.status == "Đang hiệu lực"
@@ -1119,7 +1134,7 @@ internal fun ModuleActionBar(
     val showRespondIncident = role != UserRole.NguoiDung && screen == AppScreen.Incidents && !item.status.equals("Đã khắc phục", true)
     val showMarkRead = screen == AppScreen.Notices && item.status == "Mới"
     if (!showRent && !showDecision && !showConfirm && !showRenew && !showClose && !showRenewDecision
-        && !showPayInvoice && !showPaymentDecision && !showRespondIncident && !showMarkRead) return
+        && !showPayInvoice && !showPaymentDecision && !showRespondIncident && !showMarkRead && !showTenantConfirmRequest) return
 
     Surface(
         shape = CutCornerShape(14.dp),
@@ -1158,6 +1173,16 @@ internal fun ModuleActionBar(
                     modifier = Modifier.weight(1f).height(44.dp)
                 ) {
                     Text("Từ chối", fontWeight = FontWeight.Bold)
+                }
+            }
+            if (showTenantConfirmRequest) {
+                Button(
+                    onClick = onTenantConfirmRequest,
+                    shape = RoundedCornerShape(10.dp),
+                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF10B981)),
+                    modifier = Modifier.fillMaxWidth().height(44.dp)
+                ) {
+                    Text("Xác nhận thuê (Tạo hợp đồng)", color = Color.White, fontWeight = FontWeight.Bold)
                 }
             }
             if (showConfirm) {
