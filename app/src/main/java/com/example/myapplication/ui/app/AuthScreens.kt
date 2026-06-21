@@ -563,7 +563,7 @@ internal fun LoginScreen(repository: RentalRepository, onLoggedIn: (UserSession)
                                 }
                                 Text(
                                     "Quên mật khẩu?",
-                                    color = Color(0xFFFDE68A),
+                                    color = Color(0xFFFFF9C4),
                                     fontSize = 14.sp,
                                     fontWeight = FontWeight.SemiBold,
                                     modifier = Modifier.clickable { mode = AuthMode.Forgot }
