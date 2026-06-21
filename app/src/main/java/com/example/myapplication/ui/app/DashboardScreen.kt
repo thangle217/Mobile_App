@@ -1,12 +1,20 @@
 package com.example.myapplication.ui.app
 
+import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.CutCornerShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -18,6 +26,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import com.example.myapplication.data.repository.RentalRepository
 import com.example.myapplication.domain.model.AppScreen
 import com.example.myapplication.domain.model.DashboardSummary
@@ -26,6 +35,13 @@ import com.example.myapplication.domain.model.UiState
 import com.example.myapplication.domain.model.UserRole
 import com.example.myapplication.domain.model.UserSession
 import com.example.myapplication.domain.util.formatCompactMoney
+
+private val GreenDark   = Color(0xFF064E3B)
+private val GreenMid    = Color(0xFF0F766E)
+private val GreenLight  = Color(0xFF34D399)
+private val BgGradient  = Brush.verticalGradient(listOf(Color(0xFF0F766E), Color(0xFF064E3B)))
+private val CardBg      = Color.White.copy(alpha = 0.15f)
+private val CardBorder  = Color.White.copy(alpha = 0.3f)
 
 @Composable
 internal fun DashboardScreen(
@@ -36,35 +52,28 @@ internal fun DashboardScreen(
 ) {
     var state by remember { mutableStateOf<UiState<DashboardSummary>>(UiState.Loading) }
 
-    fun load() {
-        state = UiState.Loading
-    }
+    fun load() { state = UiState.Loading }
 
     LaunchedEffect(session, state) {
-        if (state is UiState.Loading) {
-            state = repository.dashboard(session)
-        }
+        if (state is UiState.Loading) state = repository.dashboard(session)
     }
 
     StateContainer(state = state, onRetry = { load() }, onSessionExpired = onSessionExpired) { summary, source ->
         LazyColumn(
-            modifier = Modifier
-                .fillMaxSize()
-                .background(Brush.verticalGradient(listOf(Color(0xFFF8FAFC), Color(0xFFF1F5F9))))
-                .padding(16.dp),
+            modifier = Modifier.fillMaxSize().background(BgGradient).padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
             item { HeroCard(session, summary, source) }
             item {
                 Row(horizontalArrangement = Arrangement.spacedBy(12.dp), modifier = Modifier.fillMaxWidth()) {
-                    StatCard("Phòng trọ", summary.totalRooms.toString(), "${summary.emptyRooms} phòng trống", Color(0xFF10B981), Modifier.weight(1f))
-                    StatCard("Hóa đơn", summary.unpaidInvoices.toString(), "Hóa đơn chưa thu", Color(0xFFF59E0B), Modifier.weight(1f))
+                    StatCard("Phòng trọ", summary.totalRooms.toString(), "${summary.emptyRooms} phòng trống", GreenLight, Modifier.weight(1f))
+                    StatCard("Hóa đơn", summary.unpaidInvoices.toString(), "Hóa đơn chưa thu", Color(0xFFFBBF24), Modifier.weight(1f))
                 }
             }
             item {
                 Row(horizontalArrangement = Arrangement.spacedBy(12.dp), modifier = Modifier.fillMaxWidth()) {
-                    StatCard("Yêu cầu", summary.pendingTasks.toString(), "Yêu cầu cần xử lý", Color(0xFF3B82F6), Modifier.weight(1f))
-                    StatCard("Doanh thu", formatCompactMoney(summary.revenue), "Tổng đã thanh toán", Color(0xFF8B5CF6), Modifier.weight(1f))
+                    StatCard("Yêu cầu", summary.pendingTasks.toString(), "Yêu cầu cần xử lý", Color(0xFF60A5FA), Modifier.weight(1f))
+                    StatCard("Doanh thu", formatCompactMoney(summary.revenue), "Tổng đã thanh toán", Color(0xFFC084FC), Modifier.weight(1f))
                 }
             }
             item { SectionTitle("Tác vụ nhanh") }
@@ -75,31 +84,35 @@ internal fun DashboardScreen(
 
 @Composable
 internal fun HeroCard(session: UserSession?, summary: DashboardSummary, source: DataSource) {
-    Card(
-        shape = RoundedCornerShape(16.dp),
-        colors = CardDefaults.cardColors(containerColor = Color.Transparent),
-        modifier = Modifier.fillMaxWidth()
+    val infiniteTransition = rememberInfiniteTransition(label = "hero")
+    val shimmer by infiniteTransition.animateFloat(
+        initialValue = 0.7f, targetValue = 1f,
+        animationSpec = infiniteRepeatable(tween(1600, easing = FastOutSlowInEasing), RepeatMode.Reverse),
+        label = "shimmer"
+    )
+
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(CutCornerShape(24.dp))
+            .background(CardBg)
+            .border(2.dp, GreenLight.copy(alpha = shimmer * 0.6f), CutCornerShape(24.dp))
+            .padding(20.dp)
     ) {
-        Column(
-            modifier = Modifier
-                .background(
-                    Brush.linearGradient(
-                        colors = listOf(Color(0xFF4F46E5), Color(0xFF6D28D9), Color(0xFF1E1B4B))
+        Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                AppLogo(size = 44)
+                Column {
+                    Text(
+                        "Xin chào, ${session?.displayName ?: "bạn"} 👋",
+                        color = Color.White, fontWeight = FontWeight.ExtraBold, fontSize = 18.sp
                     )
-                )
-                .padding(20.dp),
-            verticalArrangement = Arrangement.spacedBy(14.dp)
-        ) {
+                    Text(session?.role?.label ?: "", color = GreenLight, fontSize = 12.sp, fontWeight = FontWeight.Medium)
+                }
+            }
             Text(
-                text = "Xin chào, ${session?.displayName ?: "bạn"} 👋",
-                color = Color.White,
-                style = MaterialTheme.typography.titleLarge,
-                fontWeight = FontWeight.ExtraBold
-            )
-            Text(
-                text = "Chào mừng bạn đến với hệ thống quản lý phòng trọ Local-First. Tất cả thay đổi được lưu trữ ngay trên thiết bị của bạn.",
-                color = Color.White.copy(alpha = 0.85f),
-                style = MaterialTheme.typography.bodyMedium
+                "Hệ thống quản lý phòng trọ. Dữ liệu được lưu trực tiếp và đồng bộ trên thiết bị của bạn.",
+                color = Color.White.copy(alpha = 0.75f), fontSize = 12.sp
             )
             Row(horizontalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.fillMaxWidth()) {
                 HeroMiniMetric("Nguồn", sourceLabel(source), Modifier.weight(1f))
@@ -111,36 +124,36 @@ internal fun HeroCard(session: UserSession?, summary: DashboardSummary, source: 
 
 @Composable
 internal fun HeroMiniMetric(label: String, value: String, modifier: Modifier = Modifier) {
-    Surface(
-        modifier = modifier,
-        shape = RoundedCornerShape(12.dp),
-        color = Color.White.copy(alpha = 0.12f),
-        border = BorderStroke(1.dp, Color.White.copy(alpha = 0.08f))
+    Box(
+        modifier = modifier
+            .clip(CutCornerShape(10.dp))
+            .background(Color.White.copy(alpha = 0.12f))
+            .border(1.dp, Color.White.copy(alpha = 0.15f), CutCornerShape(10.dp))
+            .padding(10.dp)
     ) {
-        Column(modifier = Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-            Text(label, color = Color.White.copy(alpha = 0.7f), style = MaterialTheme.typography.labelMedium)
-            Text(value, color = Color.White, fontWeight = FontWeight.Bold, style = MaterialTheme.typography.bodyLarge, maxLines = 1)
+        Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+            Text(label, color = GreenLight.copy(alpha = 0.85f), fontSize = 11.sp, fontWeight = FontWeight.Medium)
+            Text(value, color = Color.White, fontWeight = FontWeight.Bold, fontSize = 15.sp, maxLines = 1)
         }
     }
 }
 
 @Composable
 internal fun StatCard(title: String, value: String, detail: String, accent: Color, modifier: Modifier = Modifier) {
-    Card(
-        modifier = modifier,
-        shape = RoundedCornerShape(16.dp),
-        colors = CardDefaults.cardColors(containerColor = Color.White),
-        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
-        border = BorderStroke(1.dp, Color(0xFFF1F5F9))
+    Box(
+        modifier = modifier
+            .clip(CutCornerShape(16.dp))
+            .background(Color.White.copy(alpha = 0.15f))
+            .border(1.dp, accent.copy(alpha = 0.4f), CutCornerShape(16.dp))
+            .padding(16.dp)
     ) {
-        Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Box(Modifier.size(8.dp).clip(CircleShape).background(accent))
-                Spacer(Modifier.width(8.dp))
-                Text(title, color = Color(0xFF64748B), style = MaterialTheme.typography.labelMedium, maxLines = 1)
+        Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                Box(Modifier.size(7.dp).clip(CutCornerShape(2.dp)).background(accent))
+                Text(title, color = Color.White.copy(alpha = 0.75f), fontSize = 11.sp, maxLines = 1)
             }
-            Text(value, style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.ExtraBold, color = Color(0xFF1E293B))
-            Text(detail, color = accent, maxLines = 1, style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Medium)
+            Text(value, fontSize = 26.sp, fontWeight = FontWeight.ExtraBold, color = Color.White)
+            Text(detail, color = accent, maxLines = 1, fontSize = 11.sp, fontWeight = FontWeight.SemiBold)
         }
     }
 }
@@ -156,55 +169,32 @@ internal fun QuickActions(role: UserRole, onOpen: (AppScreen) -> Unit) {
     LazyRow(horizontalArrangement = Arrangement.spacedBy(12.dp), contentPadding = PaddingValues(bottom = 8.dp)) {
         items(actions) { action ->
             val accent = screenAccent(action.first)
-            Surface(
-                onClick = { onOpen(action.first) },
-                shape = RoundedCornerShape(16.dp),
-                color = Color.White,
-                border = BorderStroke(1.dp, Color(0xFFF1F5F9)),
-                shadowElevation = 3.dp,
-                modifier = Modifier.width(160.dp)
+            Box(
+                modifier = Modifier
+                    .width(150.dp)
+                    .clip(CutCornerShape(16.dp))
+                    .background(Color.White.copy(alpha = 0.15f))
+                    .border(1.dp, accent.copy(alpha = 0.45f), CutCornerShape(16.dp))
+                    .clickable { onOpen(action.first) }
             ) {
-                Column(verticalArrangement = Arrangement.spacedBy(0.dp)) {
+                Column {
                     Box(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .height(4.dp)
-                            .background(Brush.horizontalGradient(listOf(accent, Color(0xFFF59E0B))))
+                            .height(3.dp)
+                            .background(Brush.horizontalGradient(listOf(accent, GreenLight)))
                     )
-                    Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(8.dp)
-                        ) {
-                            Surface(
-                                shape = RoundedCornerShape(8.dp),
-                                color = accent.copy(alpha = 0.12f)
-                            ) {
-                                Text(
-                                    action.first.shortCode,
-                                    color = accent,
-                                    fontWeight = FontWeight.ExtraBold,
-                                    style = MaterialTheme.typography.labelSmall,
-                                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
-                                )
-                            }
-                            Box(Modifier.size(6.dp).clip(CircleShape).background(Color(0xFFF59E0B)))
+                    Column(modifier = Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                        Surface(shape = CutCornerShape(6.dp), color = accent.copy(alpha = 0.2f)) {
+                            Text(
+                                action.first.shortCode, color = accent,
+                                fontWeight = FontWeight.ExtraBold,
+                                style = MaterialTheme.typography.labelSmall,
+                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp)
+                            )
                         }
-                        Text(
-                            action.second,
-                            fontWeight = FontWeight.Bold,
-                            color = Color(0xFF1E293B),
-                            style = MaterialTheme.typography.bodyMedium,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis
-                        )
-                        Text(
-                            action.first.label,
-                            color = Color(0xFF64748B),
-                            style = MaterialTheme.typography.labelSmall,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis
-                        )
+                        Text(action.second, fontWeight = FontWeight.Bold, color = Color.White, fontSize = 13.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                        Text(action.first.label, color = GreenLight.copy(alpha = 0.8f), fontSize = 11.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
                     }
                 }
             }
