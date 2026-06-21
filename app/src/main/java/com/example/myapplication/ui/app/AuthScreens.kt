@@ -24,9 +24,12 @@ import androidx.compose.material.icons.filled.Email
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.*
@@ -37,6 +40,7 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.scale
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
@@ -314,10 +318,10 @@ internal fun LoginScreen(repository: RentalRepository, onLoggedIn: (UserSession)
                 .fillMaxWidth()
                 .padding(horizontal = 24.dp)
         ) {
-            // Glowing border animation
+            // Glowing border animation - warm white sunlight
             val infiniteTransition = rememberInfiniteTransition(label = "eyecatcher")
             val glowAlpha by infiniteTransition.animateFloat(
-                initialValue = 0.25f,
+                initialValue = 0.2f,
                 targetValue = 1f,
                 animationSpec = infiniteRepeatable(
                     animation = tween(1400, easing = FastOutSlowInEasing),
@@ -327,7 +331,7 @@ internal fun LoginScreen(repository: RentalRepository, onLoggedIn: (UserSession)
             )
             val glowWidth by infiniteTransition.animateFloat(
                 initialValue = 1f,
-                targetValue = 3f,
+                targetValue = 4f,
                 animationSpec = infiniteRepeatable(
                     animation = tween(1400, easing = FastOutSlowInEasing),
                     repeatMode = RepeatMode.Reverse
@@ -342,7 +346,7 @@ internal fun LoginScreen(repository: RentalRepository, onLoggedIn: (UserSession)
                     .fillMaxWidth()
                     .clip(CutCornerShape(40.dp))
                     .background(Color.White.copy(alpha = 0.25f))
-                    .border(glowWidth.dp, Color(0xFF34D399).copy(alpha = glowAlpha), CutCornerShape(40.dp))
+                    .border(glowWidth.dp, Color.White.copy(alpha = glowAlpha), CutCornerShape(40.dp))
                     .padding(horizontal = 24.dp, vertical = 32.dp)
                     .verticalScroll(rememberScrollState()),
                 horizontalAlignment = Alignment.CenterHorizontally
@@ -541,13 +545,14 @@ internal fun LoginScreen(repository: RentalRepository, onLoggedIn: (UserSession)
                             )
                         }
 
-                        // Footer links
+                        // Luu tai khoan + Quen mat khau - centered
                         if (currentMode == AuthMode.Login) {
-                            Row(
+                            Column(
                                 modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
-                                verticalAlignment = Alignment.CenterVertically
+                                horizontalAlignment = Alignment.CenterHorizontally,
+                                verticalArrangement = Arrangement.spacedBy(8.dp)
                             ) {
-                                Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.weight(1f)) {
+                                Row(verticalAlignment = Alignment.CenterVertically) {
                                     Checkbox(
                                         checked = true,
                                         onCheckedChange = {},
@@ -556,14 +561,9 @@ internal fun LoginScreen(repository: RentalRepository, onLoggedIn: (UserSession)
                                     )
                                     Text("Lưu tài khoản", color = Color.White, fontSize = 14.sp, modifier = Modifier.offset(x = (-8).dp))
                                 }
-                            }
-                            Box(
-                                modifier = Modifier.fillMaxWidth().padding(top = 4.dp),
-                                contentAlignment = Alignment.CenterEnd
-                            ) {
                                 Text(
                                     "Quên mật khẩu?",
-                                    color = Color(0xFF34D399),
+                                    color = Color(0xFFFDE68A),
                                     fontSize = 14.sp,
                                     fontWeight = FontWeight.SemiBold,
                                     modifier = Modifier.clickable { mode = AuthMode.Forgot }
@@ -586,14 +586,23 @@ internal fun LoginScreen(repository: RentalRepository, onLoggedIn: (UserSession)
                 }
             }
 
-            // Top Hexagon Logo (static)
+            // Top Hexagon Logo with tap bounce animation
+            var logoTapped by remember { mutableStateOf(false) }
+            val logoScale by animateFloatAsState(
+                targetValue = if (logoTapped) 1.35f else 1f,
+                animationSpec = spring(dampingRatio = Spring.DampingRatioMediumBouncy, stiffness = Spring.StiffnessMedium),
+                finishedListener = { if (logoTapped) logoTapped = false },
+                label = "logoScale"
+            )
             Box(
                 modifier = Modifier
                     .size(80.dp)
                     .align(Alignment.TopCenter)
+                    .scale(logoScale)
                     .clip(HexagonShape())
                     .background(Color(0xFF064E3B))
-                    .border(2.dp, Color(0xFF34D399), HexagonShape()),
+                    .border(2.dp, Color(0xFF34D399), HexagonShape())
+                    .clickable { logoTapped = true },
                 contentAlignment = Alignment.Center
             ) {
                 Icon(
