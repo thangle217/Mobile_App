@@ -314,6 +314,27 @@ internal fun LoginScreen(repository: RentalRepository, onLoggedIn: (UserSession)
                 .fillMaxWidth()
                 .padding(horizontal = 24.dp)
         ) {
+            // Glowing border animation
+            val infiniteTransition = rememberInfiniteTransition(label = "eyecatcher")
+            val glowAlpha by infiniteTransition.animateFloat(
+                initialValue = 0.25f,
+                targetValue = 1f,
+                animationSpec = infiniteRepeatable(
+                    animation = tween(1400, easing = FastOutSlowInEasing),
+                    repeatMode = RepeatMode.Reverse
+                ),
+                label = "glow"
+            )
+            val glowWidth by infiniteTransition.animateFloat(
+                initialValue = 1f,
+                targetValue = 3f,
+                animationSpec = infiniteRepeatable(
+                    animation = tween(1400, easing = FastOutSlowInEasing),
+                    repeatMode = RepeatMode.Reverse
+                ),
+                label = "glowWidth"
+            )
+
             // Glassmorphism Card
             Column(
                 modifier = Modifier
@@ -321,7 +342,7 @@ internal fun LoginScreen(repository: RentalRepository, onLoggedIn: (UserSession)
                     .fillMaxWidth()
                     .clip(CutCornerShape(40.dp))
                     .background(Color.White.copy(alpha = 0.25f))
-                    .border(1.dp, Color.White.copy(alpha = 0.4f), CutCornerShape(40.dp))
+                    .border(glowWidth.dp, Color(0xFF34D399).copy(alpha = glowAlpha), CutCornerShape(40.dp))
                     .padding(horizontal = 24.dp, vertical = 32.dp)
                     .verticalScroll(rememberScrollState()),
                 horizontalAlignment = Alignment.CenterHorizontally
@@ -524,24 +545,27 @@ internal fun LoginScreen(repository: RentalRepository, onLoggedIn: (UserSession)
                         if (currentMode == AuthMode.Login) {
                             Row(
                                 modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
-                                horizontalArrangement = Arrangement.SpaceBetween,
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
-                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.weight(1f)) {
                                     Checkbox(
-                                        checked = true, 
-                                        onCheckedChange = {}, 
+                                        checked = true,
+                                        onCheckedChange = {},
                                         colors = CheckboxDefaults.colors(checkedColor = Color(0xFF0F766E), checkmarkColor = Color.White, uncheckedColor = Color.White.copy(alpha = 0.5f)),
-                                        modifier = Modifier.padding(end = 4.dp).offset(x = (-8).dp)
+                                        modifier = Modifier.offset(x = (-8).dp)
                                     )
-                                    Text("Lưu tài khoản", color = Color.White, fontSize = 14.sp, maxLines = 1, modifier = Modifier.offset(x = (-8).dp))
+                                    Text("Lưu tài khoản", color = Color.White, fontSize = 14.sp, modifier = Modifier.offset(x = (-8).dp))
                                 }
+                            }
+                            Box(
+                                modifier = Modifier.fillMaxWidth().padding(top = 4.dp),
+                                contentAlignment = Alignment.CenterEnd
+                            ) {
                                 Text(
-                                    "Quên mật khẩu?", 
-                                    color = Color.White, 
+                                    "Quên mật khẩu?",
+                                    color = Color(0xFF34D399),
                                     fontSize = 14.sp,
                                     fontWeight = FontWeight.SemiBold,
-                                    maxLines = 1,
                                     modifier = Modifier.clickable { mode = AuthMode.Forgot }
                                 )
                             }
@@ -562,41 +586,20 @@ internal fun LoginScreen(repository: RentalRepository, onLoggedIn: (UserSession)
                 }
             }
 
-            // Top Hexagon Logo Eyecatcher Animation
-            val infiniteTransition = rememberInfiniteTransition(label = "eyecatcher")
-            val offsetY by infiniteTransition.animateFloat(
-                initialValue = 0f,
-                targetValue = -12f,
-                animationSpec = infiniteRepeatable(
-                    animation = tween(1200, easing = FastOutSlowInEasing),
-                    repeatMode = RepeatMode.Reverse
-                ),
-                label = "bounce"
-            )
-            val glowAlpha by infiniteTransition.animateFloat(
-                initialValue = 0.4f,
-                targetValue = 1f,
-                animationSpec = infiniteRepeatable(
-                    animation = tween(1200, easing = FastOutSlowInEasing),
-                    repeatMode = RepeatMode.Reverse
-                ),
-                label = "glow"
-            )
-
+            // Top Hexagon Logo (static)
             Box(
                 modifier = Modifier
                     .size(80.dp)
                     .align(Alignment.TopCenter)
-                    .offset(y = offsetY.dp)
                     .clip(HexagonShape())
-                    .background(Color(0xFF064E3B)) // Dark Green Hexagon
-                    .border(2.dp, Color(0xFF34D399).copy(alpha = glowAlpha), HexagonShape()),
+                    .background(Color(0xFF064E3B))
+                    .border(2.dp, Color(0xFF34D399), HexagonShape()),
                 contentAlignment = Alignment.Center
             ) {
                 Icon(
                     imageVector = Icons.Default.Home,
                     contentDescription = "App Logo",
-                    tint = Color.White.copy(alpha = glowAlpha),
+                    tint = Color.White,
                     modifier = Modifier.size(40.dp)
                 )
             }
