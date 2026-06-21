@@ -279,58 +279,52 @@ internal fun HouseFormDialog(item: RentalItem, onDismiss: () -> Unit, onSave: (R
     var status by remember(item) { mutableStateOf(item.status.ifBlank { "Đang hoạt động" }) }
     var error by remember { mutableStateOf<String?>(null) }
 
+    val fieldColors = OutlinedTextFieldDefaults.colors(
+        focusedTextColor = Color.White, unfocusedTextColor = Color.White,
+        focusedBorderColor = Color(0xFF34D399), unfocusedBorderColor = Color.White.copy(alpha = 0.3f),
+        cursorColor = Color(0xFF34D399), focusedLabelColor = Color(0xFF34D399), unfocusedLabelColor = Color.White.copy(alpha = 0.55f)
+    )
+
     AlertDialog(
         onDismissRequest = onDismiss,
-        shape = RoundedCornerShape(16.dp),
-        title = {
-            Text(
-                text = if (item.id.isBlank()) "Thêm nhà trọ" else "Sửa nhà trọ",
-                fontWeight = FontWeight.Bold, color = Color(0xFF1E293B)
-            )
-        },
+        title = { Text(if (item.id.isBlank()) "Thêm nhà trọ" else "Sửa nhà trọ", fontWeight = FontWeight.Bold, color = Color.White) },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                OutlinedTextField(
-                    value = name, onValueChange = { name = it },
-                    label = { Text("Tên nhà trọ *") },
-                    modifier = Modifier.fillMaxWidth(), singleLine = true,
-                    shape = RoundedCornerShape(8.dp)
-                )
-                OutlinedTextField(
-                    value = address, onValueChange = { address = it },
-                    label = { Text("Địa chỉ") },
-                    modifier = Modifier.fillMaxWidth(), singleLine = true,
-                    shape = RoundedCornerShape(8.dp)
-                )
-                OutlinedTextField(
-                    value = roomCount, onValueChange = { roomCount = it },
-                    label = { Text("Số phòng (VD: 20 phòng)") },
-                    modifier = Modifier.fillMaxWidth(), singleLine = true,
-                    shape = RoundedCornerShape(8.dp)
-                )
-                Text("Trạng thái", style = MaterialTheme.typography.labelMedium, color = Color(0xFF64748B))
+                OutlinedTextField(value = name, onValueChange = { name = it }, label = { Text("Tên nhà trọ *") }, modifier = Modifier.fillMaxWidth(), singleLine = true, shape = CutCornerShape(8.dp), colors = fieldColors)
+                OutlinedTextField(value = address, onValueChange = { address = it }, label = { Text("Địa chỉ") }, modifier = Modifier.fillMaxWidth(), singleLine = true, shape = CutCornerShape(8.dp), colors = fieldColors)
+                OutlinedTextField(value = roomCount, onValueChange = { roomCount = it }, label = { Text("Số phòng (VD: 20 phòng)") }, modifier = Modifier.fillMaxWidth(), singleLine = true, shape = CutCornerShape(8.dp), colors = fieldColors)
+                Text("Trạng thái", style = MaterialTheme.typography.labelMedium, color = Color(0xFF34D399))
                 LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     items(listOf("Đang hoạt động", "Tạm dừng")) { s ->
-                        FilterChip(
-                            selected = status == s, onClick = { status = s }, label = { Text(s) },
-                            shape = RoundedCornerShape(8.dp)
-                        )
+                        val active = status == s
+                        Box(
+                            modifier = Modifier
+                                .clip(CutCornerShape(8.dp))
+                                .background(if (active) Color(0xFF34D399).copy(alpha = 0.2f) else Color.Transparent)
+                                .border(1.dp, if (active) Color(0xFF34D399) else Color.White.copy(alpha = 0.3f), CutCornerShape(8.dp))
+                                .clickable { status = s }
+                                .padding(horizontal = 12.dp, vertical = 6.dp)
+                        ) { Text(s, color = if (active) Color(0xFF34D399) else Color.White.copy(alpha = 0.7f), fontSize = 12.sp, fontWeight = if (active) FontWeight.Bold else FontWeight.Normal) }
                     }
                 }
-                error?.let { Text(it, color = Color(0xFFEF4444), style = MaterialTheme.typography.bodySmall) }
+                error?.let { Text(it, color = Color(0xFFFCA5A5), style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.Medium) }
             }
         },
         confirmButton = {
-            Button(
-                onClick = {
-                    if (name.isBlank()) error = "Tên nhà trọ không được để trống."
-                    else onSave(item.copy(title = name.trim(), status = status, value = roomCount.trim(), note = address.trim()))
-                },
-                shape = RoundedCornerShape(8.dp),
-                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF0D9488))
-            ) { Text("Lưu nhà trọ", fontWeight = FontWeight.Bold) }
+            Box(
+                modifier = Modifier
+                    .clip(CutCornerShape(10.dp))
+                    .background(Brush.horizontalGradient(listOf(Color(0xFF0F766E), Color(0xFF0369A1))))
+                    .clickable {
+                        if (name.isBlank()) error = "Tên nhà trọ không được để trống." else onSave(item.copy(title = name.trim(), status = status, value = roomCount.trim(), note = address.trim()))
+                    }
+                    .padding(horizontal = 20.dp, vertical = 10.dp)
+            ) { Text("Lưu nhà trọ", color = Color.White, fontWeight = FontWeight.Bold) }
         },
-        dismissButton = { TextButton(onClick = onDismiss) { Text("Hủy") } }
+        dismissButton = { TextButton(onClick = onDismiss) { Text("Hủy", color = Color(0xFF34D399)) } },
+        containerColor = Color(0xFF064E3B),
+        titleContentColor = Color.White,
+        shape = CutCornerShape(20.dp)
     )
 }
 
@@ -342,58 +336,52 @@ internal fun RoomTypeFormDialog(item: RentalItem, onDismiss: () -> Unit, onSave:
     var status by remember(item) { mutableStateOf(item.status.ifBlank { "Đang dùng" }) }
     var error by remember { mutableStateOf<String?>(null) }
 
+    val fieldColors = OutlinedTextFieldDefaults.colors(
+        focusedTextColor = Color.White, unfocusedTextColor = Color.White,
+        focusedBorderColor = Color(0xFF34D399), unfocusedBorderColor = Color.White.copy(alpha = 0.3f),
+        cursorColor = Color(0xFF34D399), focusedLabelColor = Color(0xFF34D399), unfocusedLabelColor = Color.White.copy(alpha = 0.55f)
+    )
+
     AlertDialog(
         onDismissRequest = onDismiss,
-        shape = RoundedCornerShape(16.dp),
-        title = {
-            Text(
-                text = if (item.id.isBlank()) "Thêm loại phòng" else "Sửa loại phòng",
-                fontWeight = FontWeight.Bold, color = Color(0xFF1E293B)
-            )
-        },
+        title = { Text(if (item.id.isBlank()) "Thêm loại phòng" else "Sửa loại phòng", fontWeight = FontWeight.Bold, color = Color.White) },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                OutlinedTextField(
-                    value = name, onValueChange = { name = it },
-                    label = { Text("Tên loại phòng *") },
-                    modifier = Modifier.fillMaxWidth(), singleLine = true,
-                    shape = RoundedCornerShape(8.dp)
-                )
-                OutlinedTextField(
-                    value = priceRange, onValueChange = { priceRange = it },
-                    label = { Text("Khoảng giá (VD: 2.000.000đ - 3.500.000đ)") },
-                    modifier = Modifier.fillMaxWidth(), singleLine = true,
-                    shape = RoundedCornerShape(8.dp)
-                )
-                Text("Trạng thái", style = MaterialTheme.typography.labelMedium, color = Color(0xFF64748B))
+                OutlinedTextField(value = name, onValueChange = { name = it }, label = { Text("Tên loại phòng *") }, modifier = Modifier.fillMaxWidth(), singleLine = true, shape = CutCornerShape(8.dp), colors = fieldColors)
+                OutlinedTextField(value = priceRange, onValueChange = { priceRange = it }, label = { Text("Khoảng giá (VD: 2.000.000đ - 3.500.000đ)") }, modifier = Modifier.fillMaxWidth(), singleLine = true, shape = CutCornerShape(8.dp), colors = fieldColors)
+                Text("Trạng thái", style = MaterialTheme.typography.labelMedium, color = Color(0xFF34D399))
                 LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     items(listOf("Đang dùng", "Ngừng dùng")) { s ->
-                        FilterChip(
-                            selected = status == s, onClick = { status = s }, label = { Text(s) },
-                            shape = RoundedCornerShape(8.dp)
-                        )
+                        val active = status == s
+                        Box(
+                            modifier = Modifier
+                                .clip(CutCornerShape(8.dp))
+                                .background(if (active) Color(0xFF34D399).copy(alpha = 0.2f) else Color.Transparent)
+                                .border(1.dp, if (active) Color(0xFF34D399) else Color.White.copy(alpha = 0.3f), CutCornerShape(8.dp))
+                                .clickable { status = s }
+                                .padding(horizontal = 12.dp, vertical = 6.dp)
+                        ) { Text(s, color = if (active) Color(0xFF34D399) else Color.White.copy(alpha = 0.7f), fontSize = 12.sp, fontWeight = if (active) FontWeight.Bold else FontWeight.Normal) }
                     }
                 }
-                OutlinedTextField(
-                    value = note, onValueChange = { note = it },
-                    label = { Text("Ghi chú") },
-                    modifier = Modifier.fillMaxWidth(), minLines = 2,
-                    shape = RoundedCornerShape(8.dp)
-                )
-                error?.let { Text(it, color = Color(0xFFEF4444), style = MaterialTheme.typography.bodySmall) }
+                OutlinedTextField(value = note, onValueChange = { note = it }, label = { Text("Ghi chú") }, modifier = Modifier.fillMaxWidth(), minLines = 2, shape = CutCornerShape(8.dp), colors = fieldColors)
+                error?.let { Text(it, color = Color(0xFFFCA5A5), style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.Medium) }
             }
         },
         confirmButton = {
-            Button(
-                onClick = {
-                    if (name.isBlank()) error = "Tên loại phòng không được để trống."
-                    else onSave(item.copy(title = name.trim(), status = status, value = priceRange.trim(), note = note.trim()))
-                },
-                shape = RoundedCornerShape(8.dp),
-                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF06B6D4))
-            ) { Text("Lưu loại phòng", fontWeight = FontWeight.Bold) }
+            Box(
+                modifier = Modifier
+                    .clip(CutCornerShape(10.dp))
+                    .background(Brush.horizontalGradient(listOf(Color(0xFF0F766E), Color(0xFF0369A1))))
+                    .clickable {
+                        if (name.isBlank()) error = "Tên loại phòng không được để trống." else onSave(item.copy(title = name.trim(), status = status, value = priceRange.trim(), note = note.trim()))
+                    }
+                    .padding(horizontal = 20.dp, vertical = 10.dp)
+            ) { Text("Lưu loại phòng", color = Color.White, fontWeight = FontWeight.Bold) }
         },
-        dismissButton = { TextButton(onClick = onDismiss) { Text("Hủy") } }
+        dismissButton = { TextButton(onClick = onDismiss) { Text("Hủy", color = Color(0xFF34D399)) } },
+        containerColor = Color(0xFF064E3B),
+        titleContentColor = Color.White,
+        shape = CutCornerShape(20.dp)
     )
 }
 
@@ -411,107 +399,84 @@ internal fun RoomFormDialog(
     var status by remember(item) { mutableStateOf(item.status.ifBlank { "Còn trống" }) }
     var error by remember { mutableStateOf<String?>(null) }
 
+    val fieldColors = OutlinedTextFieldDefaults.colors(
+        focusedTextColor = Color.White, unfocusedTextColor = Color.White,
+        focusedBorderColor = Color(0xFF34D399), unfocusedBorderColor = Color.White.copy(alpha = 0.3f),
+        cursorColor = Color(0xFF34D399), focusedLabelColor = Color(0xFF34D399), unfocusedLabelColor = Color.White.copy(alpha = 0.55f)
+    )
+
     AlertDialog(
         onDismissRequest = onDismiss,
-        shape = RoundedCornerShape(16.dp),
-        title = {
-            Text(
-                text = if (item.id.isBlank()) "Thêm phòng" else "Sửa phòng",
-                fontWeight = FontWeight.Bold, color = Color(0xFF1E293B)
-            )
-        },
+        title = { Text(if (item.id.isBlank()) "Thêm phòng" else "Sửa phòng", fontWeight = FontWeight.Bold, color = Color.White) },
         text = {
             LazyColumn(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                item {
-                    OutlinedTextField(
-                        value = name, onValueChange = { name = it },
-                        label = { Text("Tên phòng * (VD: Phòng A01)") },
-                        modifier = Modifier.fillMaxWidth(), singleLine = true,
-                        shape = RoundedCornerShape(8.dp)
-                    )
-                }
+                item { OutlinedTextField(value = name, onValueChange = { name = it }, label = { Text("Tên phòng * (VD: Phòng A01)") }, modifier = Modifier.fillMaxWidth(), singleLine = true, shape = CutCornerShape(8.dp), colors = fieldColors) }
                 item {
                     if (houses.isNotEmpty()) {
-                        Text("Nhà trọ *", style = MaterialTheme.typography.labelMedium, color = Color(0xFF64748B))
+                        Text("Nhà trọ *", style = MaterialTheme.typography.labelMedium, color = Color(0xFF34D399))
                         Spacer(Modifier.height(4.dp))
                         LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                             items(houses) { house ->
-                                FilterChip(
-                                    selected = houseId == house.id,
-                                    onClick = { houseId = house.id },
-                                    label = { Text("${house.title} (${house.id})") },
-                                    shape = RoundedCornerShape(8.dp)
-                                )
+                                val active = houseId == house.id
+                                Box(
+                                    modifier = Modifier
+                                        .clip(CutCornerShape(8.dp))
+                                        .background(if (active) Color(0xFF34D399).copy(alpha = 0.2f) else Color.Transparent)
+                                        .border(1.dp, if (active) Color(0xFF34D399) else Color.White.copy(alpha = 0.3f), CutCornerShape(8.dp))
+                                        .clickable { houseId = house.id }
+                                        .padding(horizontal = 12.dp, vertical = 6.dp)
+                                ) { Text("${house.title} (${house.id})", color = if (active) Color(0xFF34D399) else Color.White.copy(alpha = 0.7f), fontSize = 12.sp, fontWeight = if (active) FontWeight.Bold else FontWeight.Normal) }
                             }
                         }
                     } else {
-                        OutlinedTextField(
-                            value = houseId, onValueChange = { houseId = it },
-                            label = { Text("Mã nhà trọ * (VD: NT001)") },
-                            modifier = Modifier.fillMaxWidth(), singleLine = true,
-                            shape = RoundedCornerShape(8.dp)
-                        )
+                        OutlinedTextField(value = houseId, onValueChange = { houseId = it }, label = { Text("Mã nhà trọ * (VD: NT001)") }, modifier = Modifier.fillMaxWidth(), singleLine = true, shape = CutCornerShape(8.dp), colors = fieldColors)
                     }
                 }
+                item { OutlinedTextField(value = price, onValueChange = { price = it }, label = { Text("Giá thuê * (VD: 3.200.000đ/tháng)") }, modifier = Modifier.fillMaxWidth(), singleLine = true, shape = CutCornerShape(8.dp), colors = fieldColors) }
                 item {
-                    OutlinedTextField(
-                        value = price, onValueChange = { price = it },
-                        label = { Text("Giá thuê * (VD: 3.200.000đ/tháng)") },
-                        modifier = Modifier.fillMaxWidth(), singleLine = true,
-                        shape = RoundedCornerShape(8.dp)
-                    )
-                }
-                item {
-                    Text("Trạng thái", style = MaterialTheme.typography.labelMedium, color = Color(0xFF64748B))
+                    Text("Trạng thái", style = MaterialTheme.typography.labelMedium, color = Color(0xFF34D399))
                     Spacer(Modifier.height(4.dp))
                     LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         items(listOf("Còn trống", "Đã thuê", "Đang giữ chỗ", "Đang sửa chữa")) { s ->
-                            FilterChip(
-                                selected = status == s, onClick = { status = s }, label = { Text(s) },
-                                shape = RoundedCornerShape(8.dp)
-                            )
+                            val active = status == s
+                            Box(
+                                modifier = Modifier
+                                    .clip(CutCornerShape(8.dp))
+                                    .background(if (active) Color(0xFF34D399).copy(alpha = 0.2f) else Color.Transparent)
+                                    .border(1.dp, if (active) Color(0xFF34D399) else Color.White.copy(alpha = 0.3f), CutCornerShape(8.dp))
+                                    .clickable { status = s }
+                                    .padding(horizontal = 12.dp, vertical = 6.dp)
+                            ) { Text(s, color = if (active) Color(0xFF34D399) else Color.White.copy(alpha = 0.7f), fontSize = 12.sp, fontWeight = if (active) FontWeight.Bold else FontWeight.Normal) }
                         }
                     }
                 }
-                item {
-                    OutlinedTextField(
-                        value = note, onValueChange = { note = it },
-                        label = { Text("Ghi chú (Tầng, tiện ích, ...)") },
-                        modifier = Modifier.fillMaxWidth(), minLines = 2,
-                        shape = RoundedCornerShape(8.dp)
-                    )
-                }
-                error?.let { err ->
-                    item { Text(err, color = Color(0xFFEF4444), style = MaterialTheme.typography.bodySmall) }
-                }
+                item { OutlinedTextField(value = note, onValueChange = { note = it }, label = { Text("Ghi chú (Tầng, tiện ích, ...)") }, modifier = Modifier.fillMaxWidth(), minLines = 2, shape = CutCornerShape(8.dp), colors = fieldColors) }
+                error?.let { err -> item { Text(err, color = Color(0xFFFCA5A5), style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.Medium) } }
             }
         },
         confirmButton = {
-            Button(
-                onClick = {
-                    when {
-                        name.isBlank() -> error = "Tên phòng không được để trống."
-                        houseId.isBlank() -> error = "Vui lòng chọn nhà trọ."
-                        price.isBlank() -> error = "Giá thuê không được để trống."
-                        else -> {
-                            val detailsWithHouse = item.details
-                                .filterNot { it.first == "houseId" }
-                                .toMutableList().also { it.add(0, "houseId" to houseId) }
-                            onSave(item.copy(
-                                title = name.trim(),
-                                status = status,
-                                value = price.trim(),
-                                note = note.trim(),
-                                details = detailsWithHouse
-                            ))
+            Box(
+                modifier = Modifier
+                    .clip(CutCornerShape(10.dp))
+                    .background(Brush.horizontalGradient(listOf(Color(0xFF0F766E), Color(0xFF0369A1))))
+                    .clickable {
+                        when {
+                            name.isBlank() -> error = "Tên phòng không được để trống."
+                            houseId.isBlank() -> error = "Vui lòng chọn nhà trọ."
+                            price.isBlank() -> error = "Giá thuê không được để trống."
+                            else -> {
+                                val detailsWithHouse = item.details.filterNot { it.first == "houseId" }.toMutableList().also { it.add(0, "houseId" to houseId) }
+                                onSave(item.copy(title = name.trim(), status = status, value = price.trim(), note = note.trim(), details = detailsWithHouse))
+                            }
                         }
                     }
-                },
-                shape = RoundedCornerShape(8.dp),
-                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF0891B2))
-            ) { Text("Lưu phòng", fontWeight = FontWeight.Bold) }
+                    .padding(horizontal = 20.dp, vertical = 10.dp)
+            ) { Text("Lưu phòng", color = Color.White, fontWeight = FontWeight.Bold) }
         },
-        dismissButton = { TextButton(onClick = onDismiss) { Text("Hủy") } }
+        dismissButton = { TextButton(onClick = onDismiss) { Text("Hủy", color = Color(0xFF34D399)) } },
+        containerColor = Color(0xFF064E3B),
+        titleContentColor = Color.White,
+        shape = CutCornerShape(20.dp)
     )
 }
 
