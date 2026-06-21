@@ -262,15 +262,15 @@ internal fun AppLogo(size: Int) {
 }
 
 @Composable
-internal fun StatusPill(status: String) {
+internal fun StatusPill(status: String, screen: AppScreen? = null) {
     Surface(
-        color = statusColor(status).copy(alpha = 0.18f),
+        color = statusColor(status, screen).copy(alpha = 0.18f),
         shape = CutCornerShape(6.dp),
-        border = BorderStroke(1.dp, statusColor(status).copy(alpha = 0.3f))
+        border = BorderStroke(1.dp, statusColor(status, screen).copy(alpha = 0.3f))
     ) {
         Text(
             text = status,
-            color = statusColor(status),
+            color = statusColor(status, screen),
             modifier = Modifier.padding(horizontal = 9.dp, vertical = 5.dp),
             style = MaterialTheme.typography.labelMedium,
             fontWeight = FontWeight.SemiBold
@@ -353,19 +353,38 @@ internal fun defaultStatus(screen: AppScreen): String = when (screen) {
     else -> "Đang sử dụng"
 }
 
-internal fun statusColor(status: String): Color = when {
-    status.contains("Đã", true) || status.contains("Còn trống", true) || status.contains("Đang sử dụng", true) -> Color(0xFF34D399)
-    status.contains("Chờ", true) || status.contains("Chưa", true) || status.contains("Một phần", true) || status.contains("Sắp", true) || status.contains("Cần", true) -> Color(0xFFFBBF24)
-    status.contains("Từ chối", true) || status.contains("Hủy", true) || status.contains("Tạm dừng", true) -> Color(0xFFF87171)
-    status.contains("Đang", true) || status.contains("Mới", true) -> Color(0xFF60A5FA)
-    else -> Color(0xFF94A3B8)
+internal fun statusColor(status: String, screen: AppScreen? = null): Color {
+    if (screen == AppScreen.Services || screen == AppScreen.Users || screen == AppScreen.Tenants) {
+        return Color(0xFF34D399) // Xanh lá cây nhạt
+    }
+    
+    val lowercaseStatus = status.lowercase()
+    val temp = java.text.Normalizer.normalize(lowercaseStatus, java.text.Normalizer.Form.NFD)
+    val s = "\\p{InCombiningDiacriticalMarks}+".toRegex().replace(temp, "").replace("đ", "d")
+    
+    return when {
+        s.contains("da thue") -> Color(0xFF34D399) // Xanh lá cây nhạt
+        s.contains("con trong") -> Color(0xFF34D399) // Xanh lá cây nhạt
+        s.contains("dang sua chua") -> Color(0xFFF97316) // Cam
+        s.contains("da thanh toan") -> Color(0xFF34D399) // Xanh lá cây nhạt
+        s.contains("chua thanh toan") -> Color(0xFFEF4444) // Đỏ
+        s.contains("da xac nhan") -> Color(0xFF34D399) // Xanh lá cây nhạt
+        s.contains("chua xac nhan") || s.contains("cho xac nhan") -> Color(0xFFEF4444) // Đỏ
+        s.contains("dang hieu luc") || s.contains("da duyet") || s.contains("da khac phuc") || s.contains("da xem") || s.contains("dang hoat dong") -> Color(0xFF34D399) // Xanh lá cây nhạt
+        s.contains("cho") || s.contains("dang xu ly") || s.contains("mot phan") || s.contains("sap") || s.contains("can") -> Color(0xFFFBBF24) // Vàng
+        s.contains("tu choi") || s.contains("huy") || s.contains("bi khoa") -> Color(0xFFEF4444) // Đỏ
+        s.contains("tam dung") || s.contains("da thanh ly") -> Color(0xFF94A3B8) // Xám
+        s.contains("moi") -> Color(0xFF60A5FA) // Xanh dương
+        s.contains("da") || s.contains("dang su dung") -> Color(0xFF34D399) // Xanh lá cây nhạt
+        else -> Color(0xFF94A3B8)
+    }
 }
 
 internal fun screenAccent(screen: AppScreen): Color = when (screen) {
     AppScreen.Dashboard -> Color(0xFF34D399)
     AppScreen.Houses -> Color(0xFF0D9488)
     AppScreen.RoomTypes -> Color(0xFF06B6D4)
-    AppScreen.Rooms -> Color(0xFF0891B2)
+    AppScreen.Rooms -> Color(0xFFEF4444)
     AppScreen.Tenants -> Color(0xFF10B981)
     AppScreen.Contracts -> Color(0xFF818CF8)
     AppScreen.Invoices -> Color(0xFFFBBF24)

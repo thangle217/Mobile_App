@@ -257,7 +257,7 @@ internal fun ModuleScreen(
     }
 
     StateContainer(state = state, onRetry = { load() }, onSessionExpired = onSessionExpired) { items, source ->
-        val statuses = listOf("Tất cả") + items.map { it.status }.distinct()
+        val statuses = getScreenStatuses(screen, items)
         val filtered = items.filter {
             val textMatch = it.title.contains(query, true) || it.id.contains(query, true) || it.note.contains(query, true) || it.value.contains(query, true)
             val statusMatch = status == "Tất cả" || it.status == status
@@ -314,6 +314,7 @@ internal fun ModuleScreen(
                 items(filtered, key = { it.id }) { item ->
                     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                         RentalListCard(
+                            screen = screen,
                             item = item,
                             canManage = canManage,
                             onOpen = { selected = item },
@@ -547,6 +548,7 @@ internal fun ModuleScreen(
     contractEditing?.let { item ->
         ContractEditorDialog(
             item = item,
+            rooms = rooms,
             onDismiss = { contractEditing = null },
             onSave = { rId, tenant, start, end, dep, note, status ->
                 actionError = null
@@ -656,6 +658,7 @@ internal fun ModuleScreen(
 
     if (noticeFormOpen && canManage) {
         NoticeFormDialog(
+            houses = houses,
             rooms = rooms,
             onDismiss = { noticeFormOpen = false },
             onSave = { title, content, targetType ->
@@ -901,6 +904,23 @@ internal fun ProfileEditor(
 }
 
 @Composable
+internal fun getScreenStatuses(screen: AppScreen, items: List<RentalItem>): List<String> {
+    val existing = items.map { it.status }
+    val predefined = when(screen) {
+        AppScreen.Rooms -> listOf("Còn trống", "Đã thuê", "Đang sửa chữa")
+        AppScreen.Contracts -> listOf("Chờ người thuê xác nhận", "Đang hiệu lực", "Đã thanh lý", "Hủy")
+        AppScreen.Invoices -> listOf("Chưa thanh toán", "Đã thanh toán", "Một phần", "Hủy")
+        AppScreen.Payments -> listOf("Chờ xác nhận", "Đã xác nhận", "Từ chối")
+        AppScreen.RentRequests, AppScreen.RenewRequests -> listOf("Chờ duyệt", "Đã duyệt", "Từ chối")
+        AppScreen.Incidents -> listOf("Mới", "Đang xử lý", "Đã khắc phục")
+        AppScreen.Notices -> listOf("Mới", "Đã xem")
+        AppScreen.Users -> listOf("Đang hoạt động", "Bị khóa")
+        else -> emptyList()
+    }
+    return (listOf("Tất cả") + predefined + existing).distinct()
+}
+
+@Composable
 internal fun ModuleHeader(screen: AppScreen, count: Int, source: DataSource) {
     val accent = screenAccent(screen)
     Row(
@@ -981,13 +1001,14 @@ internal fun SearchPanel(
 
 @Composable
 internal fun RentalListCard(
+    screen: AppScreen,
     item: RentalItem,
     canManage: Boolean,
     onOpen: () -> Unit,
     onEdit: () -> Unit,
     onDelete: () -> Unit
 ) {
-    val accent = statusColor(item.status)
+    val accent = statusColor(item.status, screen)
     Column(
         modifier = Modifier
             .fillMaxWidth()
@@ -1014,7 +1035,7 @@ internal fun RentalListCard(
                 Text(item.title, fontWeight = FontWeight.Bold, color = Color.White, maxLines = 1, overflow = TextOverflow.Ellipsis, fontSize = 14.sp)
                 Text(item.id, color = AppGreenLight.copy(alpha = 0.7f), fontSize = 11.sp)
             }
-            StatusPill(item.status)
+            StatusPill(item.status, screen)
         }
 
         Box(

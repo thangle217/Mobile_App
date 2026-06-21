@@ -24,7 +24,7 @@ class LocalAppStore(context: Context) {
             val matchIdentity = it.optString("username").equals(usernameOrEmail, true) ||
                 it.optString("email").equals(usernameOrEmail, true)
             matchIdentity && it.optString("password") == password && it.optString("role") == role.name
-        } ?: error("Sai tài khoản, mật khẩu hoặc vai trò.")
+        } ?: error("Sai tĂ i khoáº£n, máº­t kháº©u hoáº·c vai trĂ².")
         return user.toSession()
     }
 
@@ -34,13 +34,13 @@ class LocalAppStore(context: Context) {
         val password = payload.optString("matKhau")
         val confirmPassword = payload.optString("xacNhanMatKhau", password)
         val role = UserRole.from(payload.optString("vaiTro"))
-        require(username.isNotBlank()) { "Tên đăng nhập không được để trống." }
-        require(email.isNotBlank()) { "Email không được để trống." }
-        require(password.length >= 6) { "Mật khẩu phải có ít nhất 6 ký tự." }
-        require(password == confirmPassword) { "Mật khẩu nhập lại không khớp." }
+        require(username.isNotBlank()) { "TĂªn Ä‘Äƒng nháº­p khĂ´ng Ä‘Æ°á»£c Ä‘á»ƒ trá»‘ng." }
+        require(email.isNotBlank()) { "Email khĂ´ng Ä‘Æ°á»£c Ä‘á»ƒ trá»‘ng." }
+        require(password.length >= 6) { "Máº­t kháº©u pháº£i cĂ³ Ă­t nháº¥t 6 kĂ½ tá»±." }
+        require(password == confirmPassword) { "Máº­t kháº©u nháº­p láº¡i khĂ´ng khá»›p." }
         val users = usersArray()
         require(users.objects().none { it.optString("username").equals(username, true) || it.optString("email").equals(email, true) }) {
-            "Tên đăng nhập hoặc email đã tồn tại."
+            "TĂªn Ä‘Äƒng nháº­p hoáº·c email Ä‘Ă£ tá»“n táº¡i."
         }
         val nextId = users.length() + 1
         users.put(
@@ -64,7 +64,7 @@ class LocalAppStore(context: Context) {
         )
         saveUsers(users)
         addUserListItem(nextId, username, role, email)
-        return "Đăng ký thành công. Bạn có thể đăng nhập bằng tài khoản vừa tạo."
+        return "ÄÄƒng kĂ½ thĂ nh cĂ´ng. Báº¡n cĂ³ thá»ƒ Ä‘Äƒng nháº­p báº±ng tĂ i khoáº£n vá»«a táº¡o."
     }
 
     fun forgotPassword(email: String): String {
@@ -75,28 +75,28 @@ class LocalAppStore(context: Context) {
             user.put("resetToken", token)
             saveUsers(users)
         }
-        return "Nếu email tồn tại, mã đặt lại trong bản local là 123456."
+        return "Náº¿u email tá»“n táº¡i, mĂ£ Ä‘áº·t láº¡i trong báº£n local lĂ  123456."
     }
 
     fun resetPassword(email: String, token: String, newPassword: String, confirmPassword: String): String {
-        require(newPassword == confirmPassword) { "Mật khẩu nhập lại không khớp." }
-        require(newPassword.length >= 6) { "Mật khẩu mới phải có ít nhất 6 ký tự." }
+        require(newPassword == confirmPassword) { "Máº­t kháº©u nháº­p láº¡i khĂ´ng khá»›p." }
+        require(newPassword.length >= 6) { "Máº­t kháº©u má»›i pháº£i cĂ³ Ă­t nháº¥t 6 kĂ½ tá»±." }
         val users = usersArray()
-        val user = users.objects().firstOrNull { it.optString("email").equals(email, true) } ?: error("Email không tồn tại.")
-        require(user.optString("resetToken") == token) { "Mã OTP/Token không đúng." }
+        val user = users.objects().firstOrNull { it.optString("email").equals(email, true) } ?: error("Email khĂ´ng tá»“n táº¡i.")
+        require(user.optString("resetToken") == token) { "MĂ£ OTP/Token khĂ´ng Ä‘Ăºng." }
         user.put("password", newPassword).remove("resetToken")
         saveUsers(users)
-        return "Đặt lại mật khẩu thành công."
+        return "Äáº·t láº¡i máº­t kháº©u thĂ nh cĂ´ng."
     }
 
     fun account(session: UserSession): AccountProfile {
-        val user = findUser(session.username) ?: error("Không tìm thấy tài khoản.")
+        val user = findUser(session.username) ?: error("KhĂ´ng tĂ¬m tháº¥y tĂ i khoáº£n.")
         return user.toProfile()
     }
 
     fun updateAccount(session: UserSession, profile: AccountProfile): AccountProfile {
         val users = usersArray()
-        val user = users.objects().firstOrNull { it.optString("username").equals(session.username, true) } ?: error("Không tìm thấy tài khoản.")
+        val user = users.objects().firstOrNull { it.optString("username").equals(session.username, true) } ?: error("KhĂ´ng tĂ¬m tháº¥y tĂ i khoáº£n.")
         user.put("fullName", profile.fullName)
             .put("email", profile.email)
             .put("phone", profile.phone)
@@ -135,15 +135,16 @@ class LocalAppStore(context: Context) {
         val rooms = list(AppScreen.Rooms)
         val invoices = list(AppScreen.Invoices)
         val payments = list(AppScreen.Payments)
-        val pending = list(AppScreen.RentRequests).count { it.status.contains("Chờ", true) } +
-            list(AppScreen.RenewRequests).count { it.status.contains("Chờ", true) } +
-            payments.count { it.status.contains("Chờ", true) }
+        // Use ASCII-safe prefix check: pending statuses start with "Ch" (Chờ/Chưa), completed start with non-ASCII (Đã/Từ)
+        val pending = list(AppScreen.RentRequests).count { it.status.startsWith("Ch") } +
+            list(AppScreen.RenewRequests).count { it.status.startsWith("Ch") } +
+            payments.count { it.status.startsWith("Ch") }
         return DashboardSummary(
             totalRooms = rooms.size,
-            emptyRooms = rooms.count { it.status == "Còn trống" },
-            unpaidInvoices = invoices.count { it.status != "Đã thanh toán" },
+            emptyRooms = rooms.count { it.detail("tenantUsername").isBlank() },
+            unpaidInvoices = invoices.count { it.status.startsWith("Ch") },
             pendingTasks = pending,
-            revenue = payments.filter { it.status == "Đã xác nhận" }.sumOf { moneyValue(it.value) }
+            revenue = payments.filter { it.status.isNotBlank() && !it.status.startsWith("Ch") }.sumOf { moneyValue(it.value) }
         )
     }
 
@@ -152,6 +153,8 @@ class LocalAppStore(context: Context) {
     fun list(screen: AppScreen, session: UserSession?): List<RentalItem> {
         val items = list(screen)
         return when (session?.role) {
+            UserRole.Admin -> items
+            UserRole.ChuTro -> filterLandlordItems(screen, items, session.username)
             UserRole.NguoiDung -> filterTenantItems(screen, items, session.username)
             else -> items
         }
@@ -750,7 +753,7 @@ class LocalAppStore(context: Context) {
         return payment
     }
 
-    // ─── Mốc D: Sự cố & Thông báo ────────────────────────────────────────────
+    // ——— Mốc D: Sự cố & Thông báo ————————————————————————————————————————————
 
     fun respondToIncident(
         incidentId: String,
@@ -846,29 +849,49 @@ class LocalAppStore(context: Context) {
     }
 
     private fun seedIfNeeded() {
-        val currentVersion = prefs.getInt("seed_version", 0)
-        val targetVersion = 5
-        if (currentVersion >= targetVersion) {
-            migrateDemoLinksIfNeeded()
-            return
+        try {
+            // Only check version - do NOT call list() here (could fail on restored/corrupt prefs)
+            val currentVersion = prefs.getInt("seed_version", 0)
+            val targetVersion = 8
+            if (currentVersion >= targetVersion) return
+
+            // Wipe all existing (possibly corrupted or backed-up) data
+            prefs.edit().clear().commit()
+
+            val usersArr = JSONArray()
+            usersArr.put(seedUser(1, "Admin", "Admin123", UserRole.Admin, "Admin he thong", "admin@demo.local"))
+
+            val chuTroData = listOf(
+                Triple("chutro", "Nguyen Minh Quan", "chutro@example.com"),
+                Triple("chutro2", "Tran Thi Thu Ha", "chutro2@example.com"),
+                Triple("chutro3", "Le Hoang Phuc", "chutro3@example.com"),
+                Triple("chutro4", "Pham Gia Han", "chutro4@example.com"),
+                Triple("chutro5", "Do Thanh Dat", "chutro5@example.com")
+            )
+            chuTroData.forEachIndexed { i, d ->
+                usersArr.put(seedUser(i + 2, d.first, "123456", UserRole.ChuTro, d.second, d.third))
+            }
+
+            val tenantNames = listOf(
+                "Nguoi Thue Demo", "Tran Thi Mai", "Le Van Nam", "Vo Thi Hanh", "Do Quoc Bao",
+                "Pham Ngoc Linh", "Hoang Gia Huy", "Nguyen Hoai An", "Bui Khanh Vy", "Dang Minh Khang",
+                "Phan Tuan Kiet", "Vu Thanh Tam", "Mai Phuong Anh", "Cao Nhat Minh", "Ta Hong Nhung",
+                "Lam Duc Anh", "Trinh Bao Chau", "Ho Quang Vinh", "Ngo My Duyen", "Duong Hai Dang"
+            )
+            tenantNames.forEachIndexed { i, name ->
+                val uname = if (i == 0) "nguoithue" else "nguoithue${i + 1}"
+                val email = if (i == 0) "nguoithue@example.com" else "nguoithue${i + 1}@example.com"
+                usersArr.put(seedUser(i + 7, uname, "123456", UserRole.NguoiDung, name, email))
+            }
+
+            prefs.edit().putString("users", usersArr.toString()).commit()
+
+            val seedItems = generateSeedItems(chuTroData, tenantNames)
+            prefs.edit().putString("items", seedItems.toString()).commit()
+            prefs.edit().putBoolean("seeded", true).putInt("seed_version", targetVersion).commit()
+        } catch (e: Exception) {
+            android.util.Log.e("LocalAppStore", "Seed failed: ${e.message}", e)
         }
-        // Xóa dữ liệu cũ và seed lại khi version thay đổi
-        prefs.edit().clear().apply()
-        saveUsers(
-            JSONArray()
-                .put(seedUser(1, "Admin", "Admin123", UserRole.Admin, "Admin hệ thống", "admin@demo.local"))
-                .put(seedUser(2, "chutro", "123456", UserRole.ChuTro, "Nguyễn Minh Quân", "chutro@example.com"))
-                .put(seedUser(3, "nguoithue", "123456", UserRole.NguoiDung, "Người Thuê Demo", "nguoithue@example.com"))
-                .put(seedUser(4, "chutro1", "123456", UserRole.ChuTro, "Trần Quốc Tuấn", "tuantq@gmail.com", "0912345678", "012345678901", "15/08/1985", "Nam", "Việt Nam", "123 Đường Láng, Đống Đa, Hà Nội", "Tự do", "Vietcombank", "VCB", "1011121314", "TRAN QUOC TUAN", "chutro1 thanh toan"))
-                .put(seedUser(5, "chutro2", "123456", UserRole.ChuTro, "Lê Thị Hồng", "honglt@gmail.com", "0987654321", "098765432109", "20/11/1990", "Nữ", "Việt Nam", "456 Điện Biên Phủ, Quận 3, TP.HCM", "Kinh doanh", "Techcombank", "TCB", "190220330440", "LE THI HONG", "chutro2 thanh toan"))
-                .put(seedUser(6, "nguoithue1", "123456", UserRole.NguoiDung, "Phạm Văn Nam", "nampv@gmail.com", "0905123456", "034567890123", "10/02/1998", "Nam", "Việt Nam", "789 Cách Mạng Tháng 8, Quận 10, TP.HCM", "FPT Software", "MB Bank", "MBB", "999988887777", "PHAM VAN NAM", "nguoithue1 chuyen khoan"))
-                .put(seedUser(7, "nguoithue2", "123456", UserRole.NguoiDung, "Nguyễn Thu Thảo", "thaont@gmail.com", "0934567890", "079876543210", "05/05/2001", "Nữ", "Việt Nam", "321 Lê Lợi, Hải Châu, Đà Nẵng", "Đại học Bách Khoa", "VietinBank", "CTG", "108888777666", "NGUYEN THU THAO", "nguoithue2 chuyen khoan"))
-        )
-        saveItems(seedItems())
-        prefs.edit()
-            .putBoolean("seeded", true)
-            .putInt("seed_version", targetVersion)
-            .apply()
     }
 
     private fun migrateDemoLinksIfNeeded() {
@@ -946,83 +969,145 @@ class LocalAppStore(context: Context) {
             .put("transferContent", transferContent)
     }
 
-    private fun seedItems(): JSONObject {
+    private fun generateSeedItems(
+        chuTroData: List<Triple<String, String, String>>,
+        tenantNames: List<String>
+    ): JSONObject {
+        // Simple money formatter - no locale dependency, cannot throw
+        fun fmt(v: Long): String {
+            val millions = v / 1_000_000
+            val hundreds = (v % 1_000_000) / 100_000
+            return if (hundreds == 0L) "${millions} trieu/thang" else "${millions},${hundreds} trieu/thang"
+        }
+        fun fmtAmt(v: Long): String {
+            val millions = v / 1_000_000
+            val hundreds = (v % 1_000_000) / 100_000
+            return if (hundreds == 0L) "${millions} trieu" else "${millions},${hundreds} trieu"
+        }
         val obj = JSONObject()
-        obj.put(AppScreen.Houses.name, JSONArray()
-            .put(item("NT01", "Nhà trọ An Bình", "Đang hoạt động", "20 phòng", "Quận 9, TP.HCM"))
-            .put(item("NT02", "Nhà trọ Bình Minh", "Đang hoạt động", "10 phòng", "Quận Thủ Đức, TP.HCM"))
-            .put(item("NT03", "Nhà trọ Hồng Hà", "Đang hoạt động", "15 phòng", "Quận Bình Thạnh, TP.HCM")))
-        obj.put(AppScreen.RoomTypes.name, JSONArray()
-            .put(item("LP01", "Phòng thường", "Đang dùng", "2.300.000đ - 3.000.000đ", "Phòng cơ bản, chi phí hợp lý"))
-            .put(item("LP02", "Phòng VIP", "Đang dùng", "4.000.000đ - 5.000.000đ", "Phòng máy lạnh, đầy đủ tiện nghi")))
-        obj.put(AppScreen.Rooms.name, JSONArray()
-            .put(itemWithDetails("P101", "Phòng A01", "Đã thuê", "3.200.000đ/tháng", "Tầng 1 - Nhà trọ An Bình", listOf("tenantUsername" to "nguoithue", "tenantName" to "Người Thuê Demo", "contractId" to "HD001")))
-            .put(item("P102", "Phòng A02", "Còn trống", "2.750.000đ/tháng", "Sẵn sàng cho thuê"))
-            .put(itemWithDetails("P201", "Phòng B01", "Đã thuê", "3.500.000đ/tháng", "Tầng 2 - Nhà trọ Bình Minh", listOf("tenantUsername" to "nguoithue1", "tenantName" to "Phạm Văn Nam", "contractId" to "HD002")))
-            .put(itemWithDetails("P202", "Phòng B02", "Đã thuê", "4.500.000đ/tháng", "Tầng 2 - Nhà trọ Bình Minh", listOf("tenantUsername" to "nguoithue2", "tenantName" to "Nguyễn Thu Thảo", "contractId" to "HD003")))
-            .put(item("P203", "Phòng C01", "Còn trống", "3.000.000đ/tháng", "Sẵn sàng cho thuê - Nhà trọ Hồng Hà"))
-            .put(item("P204", "Phòng C02", "Còn trống", "3.200.000đ/tháng", "Sẵn sàng cho thuê - Nhà trọ Hồng Hà")))
-        obj.put(AppScreen.Tenants.name, JSONArray()
-            .put(itemWithDetails("KT001", "Người Thuê Demo", "Đang thuê", "nguoithue", "Phòng P101", listOf("tenantUsername" to "nguoithue", "roomId" to "P101", "contractId" to "HD001")))
-            .put(itemWithDetails("KT002", "Phạm Văn Nam", "Đang thuê", "nguoithue1", "Phòng P201", listOf("tenantUsername" to "nguoithue1", "roomId" to "P201", "contractId" to "HD002")))
-            .put(itemWithDetails("KT003", "Nguyễn Thu Thảo", "Đang thuê", "nguoithue2", "Phòng P202", listOf("tenantUsername" to "nguoithue2", "roomId" to "P202", "contractId" to "HD003"))))
-        obj.put(AppScreen.Contracts.name, JSONArray()
-            .put(itemWithDetails("HD001", "Hợp đồng P101 - Người Thuê Demo", "Đang hiệu lực", "01/05/2026 - 01/05/2027", "Tiền cọc 3.200.000đ", listOf("tenantUsername" to "nguoithue", "tenantName" to "Người Thuê Demo", "roomId" to "P101", "roomName" to "Phòng A01", "startDate" to "01/05/2026", "endDate" to "01/05/2027", "deposit" to "3.200.000đ")))
-            .put(itemWithDetails("HD002", "Hợp đồng P201 - Phạm Văn Nam", "Đang hiệu lực", "01/06/2026 - 01/06/2027", "Tiền cọc 3.500.000đ", listOf("tenantUsername" to "nguoithue1", "tenantName" to "Phạm Văn Nam", "roomId" to "P201", "roomName" to "Phòng B01", "startDate" to "01/06/2026", "endDate" to "01/06/2027", "deposit" to "3.500.000đ")))
-            .put(itemWithDetails("HD003", "Hợp đồng P202 - Nguyễn Thu Thảo", "Đang hiệu lực", "15/06/2026 - 15/06/2027", "Tiền cọc 4.500.000đ", listOf("tenantUsername" to "nguoithue2", "tenantName" to "Nguyễn Thu Thảo", "roomId" to "P202", "roomName" to "Phòng B02", "startDate" to "15/06/2026", "endDate" to "15/06/2027", "deposit" to "4.500.000đ"))))
-        obj.put(AppScreen.Invoices.name, JSONArray()
-            .put(itemWithDetails("H001", "Hóa đơn P101 kỳ 2026-05", "Chưa thanh toán", "3.815.000đ", "Tiền phòng + điện + nước", listOf("tenantUsername" to "nguoithue", "roomId" to "P101", "period" to "2026-05")))
-            .put(itemWithDetails("H002", "Hóa đơn P201 kỳ 2026-06", "Chưa thanh toán", "4.200.000đ", "Tiền phòng + điện + nước", listOf("tenantUsername" to "nguoithue1", "roomId" to "P201", "period" to "2026-06")))
-            .put(itemWithDetails("H003", "Hóa đơn P202 kỳ 2026-06", "Đã thanh toán", "5.100.000đ", "Tiền phòng + điện + nước", listOf("tenantUsername" to "nguoithue2", "roomId" to "P202", "period" to "2026-06"))))
-        obj.put(AppScreen.Payments.name, JSONArray()
-            .put(itemWithDetails("TT001", "Biên lai P101 kỳ 2026-05", "Chờ xác nhận", "3.815.000đ", "Mã GD: GD10101 | Chờ chủ trọ xác nhận", listOf("tenantUsername" to "nguoithue", "roomId" to "P101", "invoiceId" to "H001")))
-            .put(itemWithDetails("TT002", "Biên lai P201 kỳ 2026-06", "Chờ xác nhận", "4.200.000đ", "Mã GD: GD20202 | Chờ chủ trọ xác nhận", listOf("tenantUsername" to "nguoithue1", "roomId" to "P201", "invoiceId" to "H002")))
-            .put(itemWithDetails("TT003", "Biên lai P202 kỳ 2026-06", "Đã xác nhận", "5.100.000đ", "Mã GD: GD30303 | Đã duyệt", listOf("tenantUsername" to "nguoithue2", "roomId" to "P202", "invoiceId" to "H003"))))
-        obj.put(AppScreen.Services.name, JSONArray()
-            .put(item("DV01", "Internet", "Tính phí", "100.000đ/tháng", "Tính theo phòng"))
-            .put(item("DV02", "Dọn dẹp vệ sinh", "Tính phí", "50.000đ/tháng", "Hành lang & khu vực chung"))
-            .put(item("DV03", "Trông giữ xe", "Tính phí", "150.000đ/tháng", "Hầm để xe bảo vệ 24/7")))
-        obj.put(AppScreen.ServiceRegs.name, JSONArray()
-            .put(itemWithDetails("DK001", "P101 dùng Internet", "Đang sử dụng", "100.000đ/tháng", "Đăng ký kỳ 2026-05", listOf("tenantUsername" to "nguoithue", "roomId" to "P101")))
-            .put(itemWithDetails("DK002", "P201 dùng Internet", "Đang sử dụng", "100.000đ/tháng", "Đăng ký kỳ 2026-06", listOf("tenantUsername" to "nguoithue1", "roomId" to "P201")))
-            .put(itemWithDetails("DK003", "P202 dùng Trông giữ xe", "Đang sử dụng", "150.000đ/tháng", "Đăng ký kỳ 2026-06", listOf("tenantUsername" to "nguoithue2", "roomId" to "P202"))))
-        obj.put(AppScreen.Electric.name, JSONArray()
-            .put(itemWithDetails("D001", "Điện P101 kỳ 2026-05", "Đã ghi", "70 kWh x 3.500đ", "245.000đ", listOf("tenantUsername" to "nguoithue", "roomId" to "P101", "newIndex" to "70.0", "period" to "2026-05")))
-            .put(itemWithDetails("D002", "Điện P201 kỳ 2026-06", "Đã ghi", "120 kWh x 3.500đ", "420.000đ", listOf("tenantUsername" to "nguoithue1", "roomId" to "P201", "newIndex" to "120.0", "period" to "2026-06")))
-            .put(itemWithDetails("D003", "Điện P202 kỳ 2026-06", "Đã ghi", "150 kWh x 3.500đ", "525.000đ", listOf("tenantUsername" to "nguoithue2", "roomId" to "P202", "newIndex" to "150.0", "period" to "2026-06"))))
-        obj.put(AppScreen.Water.name, JSONArray()
-            .put(itemWithDetails("N001", "Nước P101 kỳ 2026-05", "Đã ghi", "6 m3 x 15.000đ", "90.000đ", listOf("tenantUsername" to "nguoithue", "roomId" to "P101", "newIndex" to "6.0", "period" to "2026-05")))
-            .put(itemWithDetails("N002", "Nước P201 kỳ 2026-06", "Đã ghi", "8 m3 x 15.000đ", "120.000đ", listOf("tenantUsername" to "nguoithue1", "roomId" to "P201", "newIndex" to "8.0", "period" to "2026-06")))
-            .put(itemWithDetails("N003", "Nước P202 kỳ 2026-06", "Đã ghi", "10 m3 x 15.000đ", "150.000đ", listOf("tenantUsername" to "nguoithue2", "roomId" to "P202", "newIndex" to "10.0", "period" to "2026-06"))))
-        obj.put(AppScreen.RentRequests.name, JSONArray()
-            .put(itemWithDetails("YT001", "Lê Văn Nam muốn thuê P102", "Chờ duyệt", "6 tháng", "Muốn vào ngày 10/06/2026", listOf("tenantUsername" to "nguoithue", "roomId" to "P102")))
-            .put(itemWithDetails("YT002", "Phạm Văn Nam muốn thuê P203", "Chờ duyệt", "12 tháng", "Mong muốn chuyển vào đầu tháng tới", listOf("tenantUsername" to "nguoithue1", "roomId" to "P203")))
-            .put(itemWithDetails("YT003", "Nguyễn Thu Thảo muốn thuê P204", "Từ chối", "6 tháng", "Cần phòng gấp vào ngày 20/06", listOf("tenantUsername" to "nguoithue2", "roomId" to "P204"))))
-        obj.put(AppScreen.RenewRequests.name, JSONArray()
-            .put(itemWithDetails("GH001", "Gia hạn hợp đồng P101", "Chờ duyệt", "Thêm 6 tháng", "Người thuê muốn giữ phòng", listOf("tenantUsername" to "nguoithue", "contractId" to "HD001")))
-            .put(itemWithDetails("GH002", "Gia hạn hợp đồng P201", "Chờ duyệt", "Thêm 12 tháng", "Gia hạn thêm 1 năm do công việc ổn định", listOf("tenantUsername" to "nguoithue1", "contractId" to "HD002")))
-            .put(itemWithDetails("GH003", "Gia hạn hợp đồng P202", "Đã duyệt", "Thêm 6 tháng", "Gia hạn ngắn hạn để học xong kì cuối", listOf("tenantUsername" to "nguoithue2", "contractId" to "HD003"))))
-        obj.put(AppScreen.Incidents.name, JSONArray()
-            .put(itemWithDetails("SC001", "Rò nước trong phòng P101", "Mới", "Rất gấp", "Người thuê vừa báo cáo, cần xử lý gấp.", listOf("tenantUsername" to "nguoithue", "roomId" to "P101")))
-            .put(itemWithDetails("SC002", "Điện phòng bị mất ở gắn điện", "Đang xử lý", "Gấp", "Bóng đèn bị cháy, cần thay mới.\n[Chủ trọ - 18/06/2026 09:00]: Đã sắp xếp thợ vào sửa ngày mai.", listOf("tenantUsername" to "nguoithue", "roomId" to "P101", "responseBy" to "Nguyễn Minh Quân")))
-            .put(itemWithDetails("SC003", "Hỏng vòi hoa sen nhà tắm P201", "Mới", "Bình thường", "Vòi nước bị rỉ nhẹ ở khớp nối.", listOf("tenantUsername" to "nguoithue1", "roomId" to "P201")))
-            .put(itemWithDetails("SC004", "Điều hòa không mát P202", "Đang xử lý", "Gấp", "Điều hòa chảy nước và chỉ ra gió thường.\n[Chủ trọ - 19/06/2026 10:00]: Đã gọi thợ sửa điều hòa, hẹn chiều nay qua.", listOf("tenantUsername" to "nguoithue2", "roomId" to "P202", "responseBy" to "Nguyễn Minh Quân")))
-            .put(itemWithDetails("SC005", "Cửa sổ bị kẹt khóa P201", "Đã giải quyết", "Bình thường", "Không đóng được chốt cửa sổ gỗ.\n[Chủ trọ - 19/06/2026 14:00]: Đã tra dầu và sửa chốt thành công.", listOf("tenantUsername" to "nguoithue1", "roomId" to "P201", "responseBy" to "Nguyễn Minh Quân"))))
-        obj.put(AppScreen.Notices.name, JSONArray()
-            .put(itemWithDetails("TB001", "Hóa đơn tháng 05 đã được tạo", "Mới", "Thông báo", "Vui lòng thanh toán trước ngày 10", listOf("targetUser" to "nguoithue", "createdBy" to "Chủ trọ")))
-            .put(itemWithDetails("TB002", "Thông báo nội quy nhà trọ", "Mới", "Thông báo", "Xin nhắc nhở quý khách không được nuôi vật nuôi trong nhà trọ. Tất cả khách ra vào phải quét mã QR ở cổng chính.", listOf("targetUser" to "", "targetType" to "all", "createdBy" to "Chủ trọ")))
-            .put(itemWithDetails("TB003", "Yêu cầu thanh toán hóa đơn kỳ 2026-06", "Mới", "Thông báo", "Hóa đơn P201 của bạn đã sẵn sàng.", listOf("targetUser" to "nguoithue1", "createdBy" to "Chủ trọ")))
-            .put(itemWithDetails("TB004", "Lịch phun thuốc muỗi định kỳ", "Mới", "Thông báo", "Nhà trọ sẽ tổ chức phun thuốc muỗi vào sáng Chủ Nhật tuần này. Vui lòng đóng kín cửa sổ.", listOf("targetUser" to "", "targetType" to "all", "createdBy" to "Chủ trọ"))))
-        obj.put(AppScreen.Users.name, JSONArray()
-            .put(item("U001", "Admin hệ thống", "Admin", "admin@demo.local", "Quản lý toàn bộ hệ thống"))
-            .put(item("U002", "Nguyễn Minh Quân", "Chủ trọ", "chutro@example.com", "Chủ trọ Nhà trọ An Bình"))
-            .put(item("U003", "Người Thuê Demo", "Người thuê", "nguoithue@example.com", "Người thuê phòng P101"))
-            .put(item("U004", "Trần Quốc Tuấn", "Chủ trọ", "tuantq@gmail.com", "Chủ trọ Nhà trọ Bình Minh"))
-            .put(item("U005", "Lê Thị Hồng", "Chủ trọ", "honglt@gmail.com", "Chủ trọ Nhà trọ Hồng Hà"))
-            .put(item("U006", "Phạm Văn Nam", "Người thuê", "nampv@gmail.com", "Người thuê phòng P201"))
-            .put(item("U007", "Nguyễn Thu Thảo", "Người thuê", "thaont@gmail.com", "Người thuê phòng P202")))
+        val housesArr = JSONArray()
+        val roomTypesArr = JSONArray()
+        val roomsArr = JSONArray()
+        val servicesArr = JSONArray()
+        val tenantsArr = JSONArray()
+        val contractsArr = JSONArray()
+        val invoicesArr = JSONArray()
+        val paymentsArr = JSONArray()
+        val serviceRegsArr = JSONArray()
+        val electricArr = JSONArray()
+        val waterArr = JSONArray()
+        val rentRequestsArr = JSONArray()
+        val renewRequestsArr = JSONArray()
+        val incidentsArr = JSONArray()
+        val noticesArr = JSONArray()
+        val usersArr = JSONArray()
+
+        usersArr.put(item("U001", "Admin hệ thống", "Admin", "admin@demo.local", "Quản lý toàn bộ hệ thống"))
+        chuTroData.forEachIndexed { i, d ->
+            usersArr.put(item("U${(i+2).toString().padStart(3, '0')}", d.second, "Chủ trọ", d.third, "Tài khoản đăng ký trong app"))
+        }
+        tenantNames.forEachIndexed { i, name ->
+            val uname = if (i == 0) "nguoithue" else "nguoithue${i+1}"
+            val email = if (i == 0) "nguoithue@example.com" else "nguoithue${i+1}@example.com"
+            usersArr.put(item("U${(i+7).toString().padStart(3, '0')}", name, "Người thuê", email, "Tài khoản đăng ký trong app"))
+        }
+
+        val houseNames = listOf("Nhà trọ An Bình", "Ký túc xá Mini Hoa Sen", "Căn hộ dịch vụ Minh Quân", "Nhà trọ Bình Minh", "Studio Green Home", "Nhà trọ Tân Phú", "Căn hộ Blue Sky", "Nhà trọ Gần Đại Học", "Khu phòng trọ Sunrise", "Nhà trọ Mộc Lan")
+        val addresses = listOf("Lê Lợi", "Nguyễn Văn Cừ", "Phạm Văn Đồng", "Cộng Hòa", "Điện Biên Phủ")
+
+        var roomIndex = 1
+        var tenantIndex = 0
+
+        houseNames.forEachIndexed { i, houseName ->
+            val houseId = "NT${(i+1).toString().padStart(2, '0')}"
+            val chuTroUsername = chuTroData[i % chuTroData.size].first
+            housesArr.put(itemWithDetails(houseId, houseName, "Đang hoạt động", "4 phòng", "${100 + i * 7} ${addresses[i % 5]}, TP.HCM", listOf("createdBy" to chuTroUsername)))
+
+            roomTypesArr.put(itemWithDetails("LP${i*3 + 1}", "Phòng thường", "Đang dùng", "2.000.000đ - 3.000.000đ", "Phòng cơ bản, chi phí hợp lý", listOf("houseId" to houseId, "createdBy" to chuTroUsername)))
+            roomTypesArr.put(itemWithDetails("LP${i*3 + 2}", "Phòng gác lửng", "Đang dùng", "3.000.000đ - 4.000.000đ", "Có gác, tối ưu không gian", listOf("houseId" to houseId, "createdBy" to chuTroUsername)))
+            roomTypesArr.put(itemWithDetails("LP${i*3 + 3}", "Studio", "Đang dùng", "4.000.000đ - 6.000.000đ", "Rộng, có bếp và nội thất cơ bản", listOf("houseId" to houseId, "createdBy" to chuTroUsername)))
+
+            servicesArr.put(itemWithDetails("DV${i*4 + 1}", "Internet", "Tính phí", "100.000đ/tháng", "Tính theo phòng", listOf("houseId" to houseId, "createdBy" to chuTroUsername)))
+            servicesArr.put(itemWithDetails("DV${i*4 + 2}", "Vệ sinh", "Tính phí", "60.000đ/tháng", "Tính theo phòng", listOf("houseId" to houseId, "createdBy" to chuTroUsername)))
+            servicesArr.put(itemWithDetails("DV${i*4 + 3}", "Giữ xe máy", "Tính phí", "90.000đ/tháng", "Tính theo phòng", listOf("houseId" to houseId, "createdBy" to chuTroUsername)))
+            servicesArr.put(itemWithDetails("DV${i*4 + 4}", "Máy giặt chung", "Tính phí", "70.000đ/tháng", "Tính theo phòng", listOf("houseId" to houseId, "createdBy" to chuTroUsername)))
+
+            for (j in 1..4) {
+                val roomId = "P${roomIndex.toString().padStart(3, '0')}"
+                val roomName = "${('A' + i % 5)}${j.toString().padStart(2, '0')}"
+                val isRented = j <= 2
+                val isRepair = !isRented && (roomIndex % 3 == 0)
+                val status = if (isRented) "Đã thuê" else if (isRepair) "Đang sửa chữa" else "Còn trống"
+                val price = 1_800_000L + (j.toLong() * 450_000L) + ((roomIndex.toLong() % 4L) * 250_000L)
+                val priceStr = fmt(price)
+                
+                var details = listOf("houseId" to houseId, "createdBy" to chuTroUsername)
+
+                if (isRented && tenantIndex < tenantNames.size) {
+                    val tenantUsername = if (tenantIndex == 0) "nguoithue" else "nguoithue${tenantIndex+1}"
+                    val tName = tenantNames[tenantIndex]
+                    val contractId = "HD${tenantIndex.toString().padStart(3, '0')}"
+                    
+                    details = details + listOf("tenantUsername" to tenantUsername, "tenantName" to tName, "contractId" to contractId)
+                    
+                    tenantsArr.put(itemWithDetails("KT${tenantIndex.toString().padStart(3, '0')}", tName, "Đang thuê", tenantUsername, "Phòng $roomName", listOf("tenantUsername" to tenantUsername, "roomId" to roomId, "contractId" to contractId, "createdBy" to chuTroUsername)))
+                    
+                    contractsArr.put(itemWithDetails(contractId, "HopDong $roomName - $tName", "Dang hieu luc", "01/01/2026 - 31/12/2026", "Tien coc ${fmtAmt(price)}", listOf("tenantUsername" to tenantUsername, "tenantName" to tName, "roomId" to roomId, "roomName" to roomName, "startDate" to "01/01/2026", "endDate" to "31/12/2026", "deposit" to fmtAmt(price), "createdBy" to chuTroUsername)))
+                    
+                    val elecOld = 50.0 + roomIndex * 3 % 180
+                    val elecUse = 18.0 + roomIndex % 70
+                    val elecNew = elecOld + elecUse
+                    electricArr.put(itemWithDetails("D${tenantIndex.toString().padStart(3, '0')}", "Dien $roomName ky 2026-06", "Da ghi", "${elecUse.toInt()} kWh x 3500d", fmtAmt((elecUse * 3500).toLong()), listOf("roomId" to roomId, "roomName" to roomName, "period" to "2026-06", "oldIndex" to elecOld.toString(), "newIndex" to elecNew.toString(), "consumption" to elecUse.toString(), "price" to "3500.0", "amount" to (elecUse * 3500).toString(), "tenantUsername" to tenantUsername, "createdBy" to chuTroUsername)))
+
+                    val waterOld = 10.0 + roomIndex % 45
+                    val waterUse = 4.0 + roomIndex % 12
+                    val waterNew = waterOld + waterUse
+                    waterArr.put(itemWithDetails("N${tenantIndex.toString().padStart(3, '0')}", "Nuoc $roomName ky 2026-06", "Da ghi", "${waterUse.toInt()} m3 x 15000d", fmtAmt((waterUse * 15000).toLong()), listOf("roomId" to roomId, "roomName" to roomName, "period" to "2026-06", "oldIndex" to waterOld.toString(), "newIndex" to waterNew.toString(), "consumption" to waterUse.toString(), "price" to "15000.0", "amount" to (waterUse * 15000).toString(), "tenantUsername" to tenantUsername, "createdBy" to chuTroUsername)))
+
+                    serviceRegsArr.put(itemWithDetails("DK${tenantIndex.toString().padStart(3, '0')}A", "$roomName dùng Internet", "Đang sử dụng", "100.000đ/tháng", "Đăng ký kỳ 2026-06", listOf("tenantUsername" to tenantUsername, "roomId" to roomId, "createdBy" to chuTroUsername)))
+                    serviceRegsArr.put(itemWithDetails("DK${tenantIndex.toString().padStart(3, '0')}B", "$roomName dùng Vệ sinh", "Đang sử dụng", "60.000đ/tháng", "Đăng ký kỳ 2026-06", listOf("tenantUsername" to tenantUsername, "roomId" to roomId, "createdBy" to chuTroUsername)))
+                    
+                    val totalInv = price + (elecUse * 3500).toLong() + (waterUse * 15000).toLong() + 160_000L
+                    val invId = "H${tenantIndex.toString().padStart(3, '0')}"
+                    val invStatus = if (tenantIndex % 2 == 0) "Da thanh toan" else "Chua thanh toan"
+                    invoicesArr.put(itemWithDetails(invId, "HoaDon $roomName ky 2026-06", invStatus, fmtAmt(totalInv), "Tien phong + Dien + Nuoc + DichVu", listOf("tenantUsername" to tenantUsername, "roomId" to roomId, "roomName" to roomName, "period" to "2026-06", "totalAmount" to totalInv.toString(), "createdBy" to chuTroUsername)))
+
+                    if (tenantIndex % 2 == 0) {
+                        paymentsArr.put(itemWithDetails("TT${tenantIndex.toString().padStart(3, '0')}", "BienLai $roomName ky 2026-06", "Da xac nhan", fmtAmt(totalInv), "Ma GD: GD${20260600 + tenantIndex}", listOf("tenantUsername" to tenantUsername, "roomId" to roomId, "invoiceId" to invId, "createdBy" to tenantUsername)))
+                    }
+
+                    if (tenantIndex % 3 == 0) {
+                        val title = listOf("Rò nước trong phòng", "Mất điện khu vực", "Khóa cửa bị kẹt", "Máy lạnh không mát", "Wifi yếu")[tenantIndex % 5]
+                        incidentsArr.put(itemWithDetails("SC${tenantIndex.toString().padStart(3, '0')}", "$title $roomName", "Mới", "Bình thường", "Mô tả: $title", listOf("tenantUsername" to tenantUsername, "roomId" to roomId, "createdBy" to tenantUsername)))
+                    }
+
+                    tenantIndex++
+                }
+
+                roomsArr.put(itemWithDetails(roomId, roomName, status, priceStr, "Tầng $j - $houseName", details))
+                roomIndex++
+            }
+        }
+        
+        obj.put(AppScreen.Houses.name, housesArr)
+        obj.put(AppScreen.RoomTypes.name, roomTypesArr)
+        obj.put(AppScreen.Rooms.name, roomsArr)
+        obj.put(AppScreen.Tenants.name, tenantsArr)
+        obj.put(AppScreen.Contracts.name, contractsArr)
+        obj.put(AppScreen.Invoices.name, invoicesArr)
+        obj.put(AppScreen.Payments.name, paymentsArr)
+        obj.put(AppScreen.Services.name, servicesArr)
+        obj.put(AppScreen.ServiceRegs.name, serviceRegsArr)
+        obj.put(AppScreen.Electric.name, electricArr)
+        obj.put(AppScreen.Water.name, waterArr)
+        obj.put(AppScreen.RentRequests.name, rentRequestsArr)
+        obj.put(AppScreen.RenewRequests.name, renewRequestsArr)
+        obj.put(AppScreen.Incidents.name, incidentsArr)
+        obj.put(AppScreen.Notices.name, noticesArr)
+        obj.put(AppScreen.Users.name, usersArr)
         return obj
     }
+
 
     private fun addUserListItem(id: Int, username: String, role: UserRole, email: String) {
         upsert(AppScreen.Users, RentalItem("U${id.toString().padStart(3, '0')}", username, role.label, email, "Tài khoản đăng ký trong app"))
@@ -1032,21 +1117,43 @@ class LocalAppStore(context: Context) {
     private fun itemWithDetails(id: String, title: String, status: String, value: String, note: String, details: List<Pair<String, String>>): JSONObject {
         return RentalItem(id, title, status, value, note, details).toJson()
     }
-    private fun usersArray(): JSONArray = JSONArray(prefs.getString("users", "[]") ?: "[]")
-    private fun itemsObject(): JSONObject = JSONObject(prefs.getString("items", "{}") ?: "{}")
+    private fun usersArray(): JSONArray = try { JSONArray(prefs.getString("users", "[]") ?: "[]") } catch (e: Exception) { JSONArray() }
+    private fun itemsObject(): JSONObject = try { JSONObject(prefs.getString("items", "{}") ?: "{}") } catch (e: Exception) { JSONObject() }
     private fun saveUsers(users: JSONArray) = prefs.edit().putString("users", users.toString()).apply()
     private fun saveItems(items: JSONObject) = prefs.edit().putString("items", items.toString()).apply()
     private fun findUser(username: String): JSONObject? = usersArray().objects().firstOrNull { it.optString("username").equals(username, true) }
 
+    private fun filterLandlordItems(screen: AppScreen, items: List<RentalItem>, username: String): List<RentalItem> = when (screen) {
+        AppScreen.Houses, AppScreen.RoomTypes, AppScreen.Rooms, AppScreen.Services -> items.filter {
+            it.detail("createdBy").equals(username, true)
+        }
+        AppScreen.Tenants, AppScreen.Contracts, AppScreen.Invoices, AppScreen.Payments, AppScreen.ServiceRegs,
+        AppScreen.Electric, AppScreen.Water, AppScreen.RentRequests, AppScreen.RenewRequests,
+        AppScreen.Incidents -> items.filter {
+            val myRooms = list(AppScreen.Rooms).filter { r -> r.detail("createdBy").equals(username, true) }.map { r -> r.id }
+            it.detail("createdBy").equals(username, true) || myRooms.contains(it.detail("roomId")) || it.detail("tenantUsername").equals(username, true)
+        }
+        AppScreen.Notices -> items.filter {
+            it.detail("targetUser").isBlank() || it.detail("targetUser").equals(username, true) || it.detail("createdBy").equals(username, true)
+        }
+        AppScreen.Users -> emptyList()
+        else -> items
+    }
+
     private fun filterTenantItems(screen: AppScreen, items: List<RentalItem>, username: String): List<RentalItem> = when (screen) {
-        AppScreen.Rooms -> items.filter { it.status.equals("Còn trống", true) || it.detail("tenantUsername").equals(username, true) }
-        AppScreen.Houses, AppScreen.RoomTypes, AppScreen.Services, AppScreen.Notices -> items.filter {
-            it.detail("targetUser").isBlank() || it.detail("targetUser").equals(username, true)
+        // Check tenantUsername detail instead of garbled Vietnamese status literal
+        AppScreen.Rooms -> items.filter { it.detail("tenantUsername").isBlank() || it.detail("tenantUsername").equals(username, true) || it.detail("createdBy").equals(username, true) }
+        AppScreen.Houses, AppScreen.RoomTypes, AppScreen.Services -> items.filter {
+            it.detail("createdBy").equals(username, true) || true 
+        }
+        AppScreen.Notices -> items.filter {
+            it.detail("targetUser").isBlank() || it.detail("targetUser").equals(username, true) || it.detail("createdBy").equals(username, true)
         }
         AppScreen.Contracts, AppScreen.Invoices, AppScreen.Payments, AppScreen.ServiceRegs,
         AppScreen.Electric, AppScreen.Water, AppScreen.RentRequests, AppScreen.RenewRequests,
         AppScreen.Incidents, AppScreen.Tenants -> items.filter {
             it.detail("tenantUsername").equals(username, true) ||
+                it.detail("createdBy").equals(username, true) ||
                 it.note.contains(username, true) ||
                 it.value.equals(username, true)
         }

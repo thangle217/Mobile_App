@@ -12,8 +12,10 @@ import com.example.myapplication.domain.model.UserRole
 import com.example.myapplication.domain.model.UserSession
 import org.json.JSONObject
 
+import com.example.myapplication.data.local.LocalAppStore
+
 class RentalRepository(context: Context) : IRentalRepository {
-    private val store = CloudDataSource()
+    private val store = LocalAppStore(context)
 
     override suspend fun login(username: String, password: String, role: UserRole): Result<UserSession> = runCatching {
         try {
@@ -35,7 +37,7 @@ class RentalRepository(context: Context) : IRentalRepository {
     }
 
     suspend fun createTestAccounts(): Result<String> = runCatching {
-        store.createTestAccounts()
+        "Đã khôi phục dữ liệu mẫu (local seed)."
     }
 
     override suspend fun forgotPassword(email: String): Result<String> = runCatching {
@@ -79,11 +81,14 @@ class RentalRepository(context: Context) : IRentalRepository {
         require(canManage(session?.role, screen)) { "Tài khoản này không có quyền sửa ${screen.label.lowercase()}." }
         validateItemForScreen(screen, item)
         val id = item.id.ifBlank { store.nextId(screen) }
-        val finalItem = if (session?.role == UserRole.NguoiDung && item.details.none { it.first == "tenantUsername" }) {
-            item.copy(details = item.details + ("tenantUsername" to session.username))
-        } else {
-            item
+        val baseDetails = item.details.toMutableList()
+        if (session?.role == UserRole.NguoiDung && baseDetails.none { it.first == "tenantUsername" }) {
+            baseDetails.add("tenantUsername" to session.username)
         }
+        if (session != null && baseDetails.none { it.first == "createdBy" }) {
+            baseDetails.add("createdBy" to session.username)
+        }
+        val finalItem = item.copy(details = baseDetails)
         store.upsert(screen, finalItem.copy(id = id))
         finalItem.copy(id = id)
     }

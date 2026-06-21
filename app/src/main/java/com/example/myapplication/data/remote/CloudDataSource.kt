@@ -259,47 +259,103 @@ class CloudDataSource {
     }
 
     suspend fun createRentRequest(roomId: String, session: UserSession, duration: String, note: String): RentalItem {
-        return RentalItem(id = "", title = "", status = "", value = "", note = "")
+        val docRef = db.collection("rentRequests").document()
+        val details = listOf("roomId" to roomId, "tenantUsername" to session.username, "duration" to duration)
+        val item = RentalItem(docRef.id, "Yêu cầu thuê phòng $roomId", "Chờ duyệt", duration, note, details)
+        upsert(AppScreen.RentRequests, item)
+        return item
     }
     suspend fun decideRentRequest(requestId: String, approve: Boolean, session: UserSession): RentalItem {
-        return RentalItem(id = "", title = "", status = "", value = "", note = "")
+        val status = if (approve) "Đã duyệt" else "Từ chối"
+        val item = RentalItem(requestId, "Phản hồi YC $requestId", status, "", "", listOf())
+        upsert(AppScreen.RentRequests, item)
+        return item
     }
     suspend fun confirmContract(contractId: String, approve: Boolean, session: UserSession): RentalItem {
-        return RentalItem(id = "", title = "", status = "", value = "", note = "")
+        val status = if (approve) "Đang hiệu lực" else "Hủy"
+        val item = RentalItem(contractId, "Hợp đồng $contractId", status, "", "", listOf())
+        upsert(AppScreen.Contracts, item)
+        return item
     }
     suspend fun saveContract(contractId: String, roomId: String, tenantUsername: String, startDate: String, endDate: String, deposit: String, note: String, status: String, session: UserSession): RentalItem {
-        return RentalItem(id = "", title = "", status = "", value = "", note = "")
+        val id = contractId.ifBlank { db.collection("contracts").document().id }
+        // get room price
+        var roomPrice = "0"
+        val roomDoc = db.collection("rooms").document(roomId).get().await()
+        if (roomDoc.exists()) {
+            roomPrice = roomDoc.getString("value") ?: "0"
+        }
+        val details = listOf("roomId" to roomId, "tenantUsername" to tenantUsername, "startDate" to startDate, "endDate" to endDate, "deposit" to deposit)
+        val item = RentalItem(id, "HĐ Thuê phòng $roomId", status, roomPrice, note, details)
+        upsert(AppScreen.Contracts, item)
+        return item
     }
     suspend fun closeContract(contractId: String, cancel: Boolean, session: UserSession): RentalItem {
-        return RentalItem(id = "", title = "", status = "", value = "", note = "")
+        val status = if (cancel) "Hủy" else "Đã thanh lý"
+        val item = RentalItem(contractId, "Thanh lý HĐ $contractId", status, "", "", listOf())
+        upsert(AppScreen.Contracts, item)
+        return item
     }
     suspend fun createRenewRequest(contractId: String, session: UserSession, newEndDate: String, note: String): RentalItem {
-        return RentalItem(id = "", title = "", status = "", value = "", note = "")
+        val docRef = db.collection("renewRequests").document()
+        val details = listOf("contractId" to contractId, "tenantUsername" to session.username, "newEndDate" to newEndDate)
+        val item = RentalItem(docRef.id, "Gia hạn HĐ $contractId", "Chờ duyệt", newEndDate, note, details)
+        upsert(AppScreen.RenewRequests, item)
+        return item
     }
     suspend fun decideRenewRequest(requestId: String, approve: Boolean, session: UserSession): RentalItem {
-        return RentalItem(id = "", title = "", status = "", value = "", note = "")
+        val status = if (approve) "Đã duyệt" else "Từ chối"
+        val item = RentalItem(requestId, "Phản hồi GH $requestId", status, "", "", listOf())
+        upsert(AppScreen.RenewRequests, item)
+        return item
     }
     suspend fun getLatestUtilityIndex(screen: AppScreen, roomId: String): Double { return 0.0 }
     suspend fun saveUtilityReading(screen: AppScreen, roomId: String, period: String, oldIndex: Double, newIndex: Double, price: Double): RentalItem {
-        return RentalItem(id = "", title = "", status = "", value = "", note = "")
+        val id = db.collection("misc").document().id
+        val total = (newIndex - oldIndex) * price
+        val item = RentalItem(id, "Chỉ số phòng $roomId kỳ $period", "Đã ghi", total.toString(), "", listOf("roomId" to roomId, "period" to period))
+        upsert(screen, item)
+        return item
     }
     suspend fun createInvoice(roomId: String, period: String, otherCost: Double, otherNote: String): RentalItem {
-        return RentalItem(id = "", title = "", status = "", value = "", note = "")
+        val id = db.collection("invoices").document().id
+        var roomPrice = 0.0
+        val roomDoc = db.collection("rooms").document(roomId).get().await()
+        if (roomDoc.exists()) {
+            roomPrice = roomDoc.getString("value")?.toDoubleOrNull() ?: 0.0
+        }
+        val total = roomPrice + otherCost
+        val details = listOf("roomId" to roomId, "period" to period, "otherCost" to otherCost.toString(), "otherNote" to otherNote)
+        val item = RentalItem(id, "Hóa đơn phòng $roomId ($period)", "Chưa thanh toán", total.toString(), otherNote, details)
+        upsert(AppScreen.Invoices, item)
+        return item
     }
     suspend fun submitPayment(invoiceId: String, transactionId: String, receiptImage: String, note: String, session: UserSession): RentalItem {
-        return RentalItem(id = "", title = "", status = "", value = "", note = "")
+        val id = db.collection("payments").document().id
+        val details = listOf("invoiceId" to invoiceId, "transactionId" to transactionId, "receiptImage" to receiptImage, "tenantUsername" to session.username)
+        val item = RentalItem(id, "Biên lai hóa đơn $invoiceId", "Chờ xác nhận", transactionId, note, details)
+        upsert(AppScreen.Payments, item)
+        return item
     }
     suspend fun decidePayment(paymentId: String, approve: Boolean, rejectReason: String?, session: UserSession): RentalItem {
-        return RentalItem(id = "", title = "", status = "", value = "", note = "")
+        val status = if (approve) "Đã xác nhận" else "Từ chối"
+        val item = RentalItem(paymentId, "Phản hồi BL $paymentId", status, "", rejectReason ?: "", listOf())
+        upsert(AppScreen.Payments, item)
+        return item
     }
     suspend fun respondToIncident(incidentId: String, response: String, newStatus: String, session: UserSession): RentalItem {
-        return RentalItem(id = "", title = "", status = "", value = "", note = "")
+        val item = RentalItem(incidentId, "Sự cố $incidentId", newStatus, "", response, listOf())
+        upsert(AppScreen.Incidents, item)
+        return item
     }
     suspend fun markNoticeAsRead(noticeId: String, username: String): RentalItem {
-        return RentalItem(id = "", title = "", status = "", value = "", note = "")
+        return RentalItem(id = noticeId, title = "", status = "Đã xem", value = "", note = "")
     }
     suspend fun createNotice(title: String, content: String, targetType: String, session: UserSession): RentalItem {
-        return RentalItem(id = "", title = "", status = "", value = "", note = "")
+        val id = db.collection("notices").document().id
+        val item = RentalItem(id, title, "Mới", targetType, content, listOf())
+        upsert(AppScreen.Notices, item)
+        return item
     }
     fun unreadNoticeCount(username: String): Int { return 0 }
     
@@ -311,8 +367,12 @@ class CloudDataSource {
             AppScreen.Tenants -> "tenants"
             AppScreen.Services -> "services"
             AppScreen.Contracts -> "contracts"
+            AppScreen.Invoices -> "invoices"
             AppScreen.Payments -> "payments"
             AppScreen.Incidents -> "incidents"
+            AppScreen.RentRequests -> "rentRequests"
+            AppScreen.RenewRequests -> "renewRequests"
+            AppScreen.Notices -> "notices"
             else -> "misc"
         }
     }
