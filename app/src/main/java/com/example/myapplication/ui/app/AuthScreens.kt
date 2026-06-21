@@ -590,11 +590,13 @@ internal fun LoginScreen(repository: RentalRepository, onLoggedIn: (UserSession)
                     .drawWithCache {
                         val outline = CutCornerShape(40.dp).createOutline(size, layoutDirection, this)
                         onDrawWithContent {
-                            drawOutline(
-                                outline = outline,
-                                color = Color.Black,
-                                style = Stroke(6.dp.toPx())
-                            )
+                            if (outline is androidx.compose.ui.graphics.Outline.Generic) {
+                                drawPath(
+                                    path = outline.path,
+                                    color = Color.Black,
+                                    style = Stroke(6.dp.toPx())
+                                )
+                            }
                             withTransform({
                                 rotate(rotation, pivot = androidx.compose.ui.geometry.Offset(size.width / 2, size.height / 2))
                             }) {
