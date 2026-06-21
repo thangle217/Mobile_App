@@ -580,26 +580,27 @@ internal fun LoginScreen(repository: RentalRepository, onLoggedIn: (UserSession)
                         }
                     }
                 }
-                
-                // Neon Border Layer
-                Box(
-                    modifier = Modifier
-                        .matchParentSize()
-                        .graphicsLayer { compositingStrategy = CompositingStrategy.Offscreen }
-                        .drawWithCache {
-                            val outline = CutCornerShape(40.dp).createOutline(size, layoutDirection, this)
-                            onDrawWithContent {
-                                androidx.compose.ui.graphics.drawscope.drawOutline(
-                                    outline = outline,
-                                    color = Color.Black,
-                                    style = Stroke(6.dp.toPx())
-                                )
-                                withTransform({
-                                    rotate(rotation, center = androidx.compose.ui.geometry.Offset(size.width / 2, size.height / 2))
-                                }) {
-                                    drawRect(
-                                        brush = Brush.sweepGradient(
-                                            colors = listOf(Color.Transparent, Color(0xFF34D399), Color.White, Color(0xFF34D399), Color.Transparent)
+            } // Close Column 341
+            
+            // Neon Border Layer
+            Box(
+                modifier = Modifier
+                    .matchParentSize()
+                    .graphicsLayer { compositingStrategy = CompositingStrategy.Offscreen }
+                    .drawWithCache {
+                        val outline = CutCornerShape(40.dp).createOutline(size, layoutDirection, this)
+                        onDrawWithContent {
+                            drawOutline(
+                                outline = outline,
+                                color = Color.Black,
+                                style = Stroke(6.dp.toPx())
+                            )
+                            withTransform({
+                                rotate(rotation, pivot = androidx.compose.ui.geometry.Offset(size.width / 2, size.height / 2))
+                            }) {
+                                drawRect(
+                                    brush = Brush.sweepGradient(
+                                        colors = listOf(Color.Transparent, Color(0xFF34D399), Color.White, Color(0xFF34D399), Color.Transparent)
                                         ),
                                         blendMode = BlendMode.SrcIn
                                     )

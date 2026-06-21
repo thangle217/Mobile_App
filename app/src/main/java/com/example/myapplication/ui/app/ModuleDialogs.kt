@@ -23,6 +23,10 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.shape.CutCornerShape
+import androidx.compose.ui.unit.sp
+import androidx.compose.ui.graphics.Brush
 import com.example.myapplication.data.repository.RentalRepository
 import com.example.myapplication.domain.model.AppScreen
 import com.example.myapplication.domain.model.RentalItem
