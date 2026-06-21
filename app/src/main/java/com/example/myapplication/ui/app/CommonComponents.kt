@@ -38,14 +38,13 @@ import com.example.myapplication.domain.model.UiState
 import com.example.myapplication.domain.model.UserRole
 
 // ─── Design Tokens (matching Auth screen palette) ───────────────────────────
-private val GreenDark   = Color(0xFF064E3B)
-private val GreenMid    = Color(0xFF0F766E)
-private val GreenLight  = Color(0xFF34D399)
-private val TealAccent  = Color(0xFF0369A1)
-private val BgGradient  = Brush.verticalGradient(listOf(Color(0xFF0F766E), Color(0xFF064E3B)))
-private val CardBg      = Color.White.copy(alpha = 0.18f)
-private val CardBorder  = Color.White.copy(alpha = 0.35f)
-
+private val GreenDark @Composable get() = if (LocalAppThemeIsLight.current) Color(0xFF059669) else Color(0xFF064E3B)
+private val GreenMid @Composable get() = if (LocalAppThemeIsLight.current) Color(0xFF10B981) else Color(0xFF0F766E)
+private val GreenLight @Composable get() = if (LocalAppThemeIsLight.current) Color(0xFF6EE7B7) else Color(0xFF34D399)
+private val TealAccent @Composable get() = if (LocalAppThemeIsLight.current) Color(0xFF0284C7) else Color(0xFF0369A1)
+private val BgGradient @Composable get() = Brush.verticalGradient(listOf(GreenMid, GreenDark))
+private val CardBg @Composable get() = Color.White.copy(alpha = if (LocalAppThemeIsLight.current) 0.25f else 0.18f)
+private val CardBorder @Composable get() = Color.White.copy(alpha = if (LocalAppThemeIsLight.current) 0.5f else 0.35f)
 @Composable
 internal fun <T> StateContainer(
     state: UiState<T>,
@@ -77,16 +76,7 @@ internal fun FullScreenLoading(message: String) {
         contentAlignment = Alignment.Center
     ) {
         Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(20.dp)) {
-            Box(
-                modifier = Modifier
-                    .size(72.dp)
-                    .clip(CutCornerShape(20.dp))
-                    .background(Color.White.copy(alpha = 0.15f))
-                    .border(2.dp, GreenLight.copy(alpha = pulse), CutCornerShape(20.dp)),
-                contentAlignment = Alignment.Center
-            ) {
-                CircularProgressIndicator(color = GreenLight, strokeWidth = 3.dp, modifier = Modifier.size(36.dp))
-            }
+            CircularProgressIndicator(color = GreenLight, strokeWidth = 3.dp, modifier = Modifier.size(48.dp))
             Text(message, color = Color.White, fontWeight = FontWeight.Medium, fontSize = 15.sp)
         }
     }
@@ -147,29 +137,60 @@ internal fun EmptyState(message: String) {
 }
 
 @Composable
-internal fun AppHeader(title: String, sourceLabel: String, onMenu: () -> Unit, onLogout: () -> Unit) {
+internal fun AppHeader(title: String, onMenu: () -> Unit, onLogout: () -> Unit, onToggleTheme: () -> Unit) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
             .background(Brush.horizontalGradient(listOf(GreenDark, GreenMid)))
-            .padding(horizontal = 12.dp, vertical = 12.dp),
+            .padding(horizontal = 16.dp, vertical = 12.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        IconButton(onClick = onMenu) {
-            Icon(Icons.Default.Menu, contentDescription = "Menu", tint = Color.White)
+        Box(
+            modifier = Modifier
+                .clip(CutCornerShape(8.dp))
+                .background(Color.White.copy(alpha = 0.15f))
+                .border(1.dp, Color.White.copy(alpha = 0.3f), CutCornerShape(8.dp))
+                .clickable { onMenu() }
+                .padding(8.dp)
+        ) {
+            Icon(Icons.Default.Menu, contentDescription = "Menu", tint = Color.White, modifier = Modifier.size(20.dp))
         }
-        Spacer(Modifier.width(4.dp))
-        Column(modifier = Modifier.weight(1f)) {
-            Text(
-                title, color = Color.White,
-                style = MaterialTheme.typography.titleMedium,
-                fontWeight = FontWeight.ExtraBold,
-                maxLines = 1, overflow = TextOverflow.Ellipsis
-            )
-            Text(sourceLabel, color = GreenLight.copy(alpha = 0.9f), style = MaterialTheme.typography.labelSmall)
-        }
-        IconButton(onClick = onLogout) {
-            Icon(Icons.Default.ExitToApp, contentDescription = "Thoát", tint = Color.White.copy(alpha = 0.9f))
+        
+        Spacer(Modifier.width(12.dp))
+        
+        Text(
+            title, color = Color.White,
+            style = MaterialTheme.typography.titleMedium,
+            fontWeight = FontWeight.ExtraBold,
+            maxLines = 1, overflow = TextOverflow.Ellipsis,
+            modifier = Modifier.weight(1f),
+            textAlign = TextAlign.Center
+        )
+        
+        Spacer(Modifier.width(12.dp))
+        
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            Box(
+                modifier = Modifier
+                    .clip(CutCornerShape(8.dp))
+                    .background(Color.White.copy(alpha = 0.15f))
+                    .border(1.dp, Color.White.copy(alpha = 0.3f), CutCornerShape(8.dp))
+                    .clickable { onToggleTheme() }
+                    .padding(8.dp)
+            ) {
+                Text(if (LocalAppThemeIsLight.current) "☀️" else "🌙", fontSize = 14.sp)
+            }
+            
+            Box(
+                modifier = Modifier
+                    .clip(CutCornerShape(8.dp))
+                    .background(Color.White.copy(alpha = 0.15f))
+                    .border(1.dp, Color.White.copy(alpha = 0.3f), CutCornerShape(8.dp))
+                    .clickable { onLogout() }
+                    .padding(8.dp)
+            ) {
+                Icon(Icons.Default.ExitToApp, contentDescription = "Thoát", tint = Color.White, modifier = Modifier.size(20.dp))
+            }
         }
     }
 }
