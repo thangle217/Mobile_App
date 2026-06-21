@@ -834,31 +834,48 @@ internal fun ProfileEditor(
     onPickFront: () -> Unit,
     onPickBack: () -> Unit
 ) {
-    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-        OutlinedTextField(profile.fullName, { onChange(profile.copy(fullName = it)) }, label = { Text("Họ tên") }, modifier = Modifier.fillMaxWidth(), singleLine = true, shape = RoundedCornerShape(8.dp))
-        OutlinedTextField(profile.email, { onChange(profile.copy(email = it)) }, label = { Text("Email") }, modifier = Modifier.fillMaxWidth(), singleLine = true, shape = RoundedCornerShape(8.dp))
-        OutlinedTextField(profile.phone, { onChange(profile.copy(phone = it)) }, label = { Text("Số điện thoại") }, modifier = Modifier.fillMaxWidth(), singleLine = true, shape = RoundedCornerShape(8.dp))
-        OutlinedTextField(profile.cccd, { onChange(profile.copy(cccd = it)) }, label = { Text("CCCD/CMND") }, modifier = Modifier.fillMaxWidth(), singleLine = true, shape = RoundedCornerShape(8.dp))
+    val fieldColors = OutlinedTextFieldDefaults.colors(
+        focusedTextColor = Color.White,
+        unfocusedTextColor = Color.White,
+        focusedBorderColor = AppGreenLight,
+        unfocusedBorderColor = Color.White.copy(alpha = 0.3f),
+        cursorColor = AppGreenLight,
+        focusedLabelColor = AppGreenLight,
+        unfocusedLabelColor = Color.White.copy(alpha = 0.55f)
+    )
+    Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+        OutlinedTextField(profile.fullName, { onChange(profile.copy(fullName = it)) }, label = { Text("Họ tên") }, modifier = Modifier.fillMaxWidth(), singleLine = true, shape = CutCornerShape(8.dp), colors = fieldColors)
+        OutlinedTextField(profile.email, { onChange(profile.copy(email = it)) }, label = { Text("Email") }, modifier = Modifier.fillMaxWidth(), singleLine = true, shape = CutCornerShape(8.dp), colors = fieldColors)
+        OutlinedTextField(profile.phone, { onChange(profile.copy(phone = it)) }, label = { Text("Số điện thoại") }, modifier = Modifier.fillMaxWidth(), singleLine = true, shape = CutCornerShape(8.dp), colors = fieldColors)
+        OutlinedTextField(profile.cccd, { onChange(profile.copy(cccd = it)) }, label = { Text("CCCD/CMND") }, modifier = Modifier.fillMaxWidth(), singleLine = true, shape = CutCornerShape(8.dp), colors = fieldColors)
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
-            OutlinedTextField(profile.dateOfBirth.take(10), { onChange(profile.copy(dateOfBirth = it)) }, label = { Text("Ngày sinh yyyy-MM-dd") }, modifier = Modifier.weight(1f), singleLine = true, shape = RoundedCornerShape(8.dp))
-            OutlinedTextField(profile.gender, { onChange(profile.copy(gender = it)) }, label = { Text("Giới tính") }, modifier = Modifier.weight(1f), singleLine = true, shape = RoundedCornerShape(8.dp))
+            OutlinedTextField(profile.dateOfBirth.take(10), { onChange(profile.copy(dateOfBirth = it)) }, label = { Text("Ngày sinh") }, modifier = Modifier.weight(1f), singleLine = true, shape = CutCornerShape(8.dp), colors = fieldColors)
+            OutlinedTextField(profile.gender, { onChange(profile.copy(gender = it)) }, label = { Text("Giới tính") }, modifier = Modifier.weight(1f), singleLine = true, shape = CutCornerShape(8.dp), colors = fieldColors)
         }
-        OutlinedTextField(profile.address, { onChange(profile.copy(address = it)) }, label = { Text("Địa chỉ") }, modifier = Modifier.fillMaxWidth(), singleLine = true, shape = RoundedCornerShape(8.dp))
-        OutlinedTextField(profile.workplace, { onChange(profile.copy(workplace = it)) }, label = { Text("Nơi công tác") }, modifier = Modifier.fillMaxWidth(), singleLine = true, shape = RoundedCornerShape(8.dp))
+        OutlinedTextField(profile.address, { onChange(profile.copy(address = it)) }, label = { Text("Địa chỉ") }, modifier = Modifier.fillMaxWidth(), singleLine = true, shape = CutCornerShape(8.dp), colors = fieldColors)
+        OutlinedTextField(profile.workplace, { onChange(profile.copy(workplace = it)) }, label = { Text("Nơi công tác") }, modifier = Modifier.fillMaxWidth(), singleLine = true, shape = CutCornerShape(8.dp), colors = fieldColors)
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
-            OutlinedButton(onClick = onPickFront, shape = RoundedCornerShape(8.dp), modifier = Modifier.weight(1f)) {
-                Text(if (profile.cccdFrontUrl.isBlank()) "Ảnh CCCD trước" else "Đổi ảnh trước")
-            }
-            OutlinedButton(onClick = onPickBack, shape = RoundedCornerShape(8.dp), modifier = Modifier.weight(1f)) {
-                Text(if (profile.cccdBackUrl.isBlank()) "Ảnh CCCD sau" else "Đổi ảnh sau")
-            }
+            Box(
+                modifier = Modifier.weight(1f).height(42.dp).clip(CutCornerShape(8.dp))
+                    .background(Color.White.copy(alpha = 0.12f))
+                    .border(1.dp, AppGreenLight.copy(alpha = 0.4f), CutCornerShape(8.dp))
+                    .clickable { onPickFront() },
+                contentAlignment = Alignment.Center
+            ) { Text(if (profile.cccdFrontUrl.isBlank()) "Ảnh CCCD trước" else "Đổi ảnh trước", color = AppGreenLight, fontSize = 12.sp, fontWeight = FontWeight.Medium) }
+            Box(
+                modifier = Modifier.weight(1f).height(42.dp).clip(CutCornerShape(8.dp))
+                    .background(Color.White.copy(alpha = 0.12f))
+                    .border(1.dp, AppGreenLight.copy(alpha = 0.4f), CutCornerShape(8.dp))
+                    .clickable { onPickBack() },
+                contentAlignment = Alignment.Center
+            ) { Text(if (profile.cccdBackUrl.isBlank()) "Ảnh CCCD sau" else "Đổi ảnh sau", color = AppGreenLight, fontSize = 12.sp, fontWeight = FontWeight.Medium) }
         }
-        OutlinedTextField(profile.bankName, { onChange(profile.copy(bankName = it)) }, label = { Text("Tên ngân hàng") }, modifier = Modifier.fillMaxWidth(), singleLine = true, shape = RoundedCornerShape(8.dp))
+        OutlinedTextField(profile.bankName, { onChange(profile.copy(bankName = it)) }, label = { Text("Tên ngân hàng") }, modifier = Modifier.fillMaxWidth(), singleLine = true, shape = CutCornerShape(8.dp), colors = fieldColors)
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
-            OutlinedTextField(profile.bankAccount, { onChange(profile.copy(bankAccount = it)) }, label = { Text("Số tài khoản") }, modifier = Modifier.weight(1f), singleLine = true, shape = RoundedCornerShape(8.dp))
-            OutlinedTextField(profile.bankOwner, { onChange(profile.copy(bankOwner = it)) }, label = { Text("Chủ tài khoản") }, modifier = Modifier.weight(1f), singleLine = true, shape = RoundedCornerShape(8.dp))
+            OutlinedTextField(profile.bankAccount, { onChange(profile.copy(bankAccount = it)) }, label = { Text("Số tài khoản") }, modifier = Modifier.weight(1f), singleLine = true, shape = CutCornerShape(8.dp), colors = fieldColors)
+            OutlinedTextField(profile.bankOwner, { onChange(profile.copy(bankOwner = it)) }, label = { Text("Chủ tài khoản") }, modifier = Modifier.weight(1f), singleLine = true, shape = CutCornerShape(8.dp), colors = fieldColors)
         }
-        OutlinedTextField(profile.transferContent, { onChange(profile.copy(transferContent = it)) }, label = { Text("Nội dung chuyển khoản mặc định") }, modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(8.dp))
+        OutlinedTextField(profile.transferContent, { onChange(profile.copy(transferContent = it)) }, label = { Text("Nội dung chuyển khoản") }, modifier = Modifier.fillMaxWidth(), shape = CutCornerShape(8.dp), colors = fieldColors)
     }
 }
 
