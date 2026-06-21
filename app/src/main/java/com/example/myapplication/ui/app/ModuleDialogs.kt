@@ -1133,8 +1133,7 @@ internal fun EditItemDialog(screen: AppScreen, item: RentalItem, onDismiss: () -
 internal fun DetailDialog(item: RentalItem, screen: AppScreen, onDismiss: () -> Unit) {
     AlertDialog(
         onDismissRequest = onDismiss,
-        shape = RoundedCornerShape(16.dp),
-        title = { Text(item.title, fontWeight = FontWeight.Bold, color = Color(0xFF1E293B)) },
+        title = { Text(item.title, fontWeight = FontWeight.Bold, color = Color.White) },
         text = {
             LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 item { DetailRow("Module", screen.label) }
@@ -1146,10 +1145,20 @@ internal fun DetailDialog(item: RentalItem, screen: AppScreen, onDismiss: () -> 
             }
         },
         confirmButton = {
-            Button(onClick = onDismiss, shape = RoundedCornerShape(8.dp)) {
-                Text("Đóng", fontWeight = FontWeight.Bold)
+            Box(
+                modifier = Modifier
+                    .clip(CutCornerShape(10.dp))
+                    .background(Color.White.copy(alpha = 0.15f))
+                    .border(1.dp, Color(0xFF34D399).copy(alpha = 0.5f), CutCornerShape(10.dp))
+                    .clickable { onDismiss() }
+                    .padding(horizontal = 20.dp, vertical = 10.dp)
+            ) {
+                Text("Đóng", color = Color(0xFF34D399), fontWeight = FontWeight.Bold)
             }
-        }
+        },
+        containerColor = Color(0xFF064E3B),
+        titleContentColor = Color.White,
+        shape = CutCornerShape(20.dp)
     )
 }
 
