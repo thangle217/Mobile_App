@@ -589,7 +589,7 @@ internal fun LoginScreen(repository: RentalRepository, onLoggedIn: (UserSession)
             // Top Hexagon Logo with tap bounce animation
             var logoTapped by remember { mutableStateOf(false) }
             val logoScale by animateFloatAsState(
-                targetValue = if (logoTapped) 1.35f else 1f,
+                targetValue = if (logoTapped) 1.4f else 1f,
                 animationSpec = spring(dampingRatio = Spring.DampingRatioMediumBouncy, stiffness = Spring.StiffnessMedium),
                 finishedListener = { if (logoTapped) logoTapped = false },
                 label = "logoScale"
