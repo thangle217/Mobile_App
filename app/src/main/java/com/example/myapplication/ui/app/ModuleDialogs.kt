@@ -132,94 +132,50 @@ internal fun ContractEditorDialog(
     var status by remember(item) { mutableStateOf(item.status.ifBlank { "Chờ người thuê xác nhận" }) }
     var localError by remember { mutableStateOf<String?>(null) }
 
+    val fieldColors = OutlinedTextFieldDefaults.colors(
+        focusedTextColor = Color.White, unfocusedTextColor = Color.White,
+        focusedBorderColor = Color(0xFF34D399), unfocusedBorderColor = Color.White.copy(alpha = 0.3f),
+        cursorColor = Color(0xFF34D399), focusedLabelColor = Color(0xFF34D399), unfocusedLabelColor = Color.White.copy(alpha = 0.55f)
+    )
+
     AlertDialog(
         onDismissRequest = onDismiss,
-        shape = RoundedCornerShape(16.dp),
         title = {
-            Text(
-                text = if (item.id.isBlank()) "Tạo hợp đồng" else "Sửa hợp đồng",
-                fontWeight = FontWeight.Bold, color = Color(0xFF1E293B)
-            )
+            Text(if (item.id.isBlank()) "Tạo hợp đồng" else "Sửa hợp đồng", fontWeight = FontWeight.Bold, color = Color.White)
         },
         text = {
             LazyColumn(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                item {
-                    OutlinedTextField(
-                        value = roomId, onValueChange = { roomId = it },
-                        label = { Text("Mã phòng *") },
-                        modifier = Modifier.fillMaxWidth(), singleLine = true,
-                        shape = RoundedCornerShape(8.dp)
-                    )
-                }
-                item {
-                    OutlinedTextField(
-                        value = tenantUsername, onValueChange = { tenantUsername = it },
-                        label = { Text("Tên đăng nhập người thuê *") },
-                        modifier = Modifier.fillMaxWidth(), singleLine = true,
-                        shape = RoundedCornerShape(8.dp)
-                    )
-                }
+                item { OutlinedTextField(value = roomId, onValueChange = { roomId = it }, label = { Text("Mã phòng *") }, modifier = Modifier.fillMaxWidth(), singleLine = true, shape = CutCornerShape(8.dp), colors = fieldColors) }
+                item { OutlinedTextField(value = tenantUsername, onValueChange = { tenantUsername = it }, label = { Text("Tên đăng nhập người thuê *") }, modifier = Modifier.fillMaxWidth(), singleLine = true, shape = CutCornerShape(8.dp), colors = fieldColors) }
                 item {
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
-                        OutlinedTextField(
-                            value = startDate, onValueChange = { startDate = it },
-                            label = { Text("Bắt đầu *") },
-                            modifier = Modifier.weight(1f), singleLine = true,
-                            shape = RoundedCornerShape(8.dp)
-                        )
-                        OutlinedTextField(
-                            value = endDate, onValueChange = { endDate = it },
-                            label = { Text("Kết thúc *") },
-                            modifier = Modifier.weight(1f), singleLine = true,
-                            shape = RoundedCornerShape(8.dp)
-                        )
+                        OutlinedTextField(value = startDate, onValueChange = { startDate = it }, label = { Text("Bắt đầu *") }, modifier = Modifier.weight(1f), singleLine = true, shape = CutCornerShape(8.dp), colors = fieldColors)
+                        OutlinedTextField(value = endDate, onValueChange = { endDate = it }, label = { Text("Kết thúc *") }, modifier = Modifier.weight(1f), singleLine = true, shape = CutCornerShape(8.dp), colors = fieldColors)
                     }
                 }
-                item {
-                    OutlinedTextField(
-                        value = deposit, onValueChange = { deposit = it },
-                        label = { Text("Tiền đặt cọc") },
-                        modifier = Modifier.fillMaxWidth(), singleLine = true,
-                        shape = RoundedCornerShape(8.dp)
-                    )
-                }
-                item {
-                    OutlinedTextField(
-                        value = status, onValueChange = { status = it },
-                        label = { Text("Trạng thái") },
-                        modifier = Modifier.fillMaxWidth(), singleLine = true,
-                        shape = RoundedCornerShape(8.dp)
-                    )
-                }
-                item {
-                    OutlinedTextField(
-                        value = note, onValueChange = { note = it },
-                        label = { Text("Ghi chú / điều khoản") },
-                        modifier = Modifier.fillMaxWidth(), minLines = 2,
-                        shape = RoundedCornerShape(8.dp)
-                    )
-                }
-                localError?.let {
-                    item { Text(it, color = Color(0xFFEF4444), style = MaterialTheme.typography.bodySmall) }
-                }
+                item { OutlinedTextField(value = deposit, onValueChange = { deposit = it }, label = { Text("Tiền đặt cọc") }, modifier = Modifier.fillMaxWidth(), singleLine = true, shape = CutCornerShape(8.dp), colors = fieldColors) }
+                item { OutlinedTextField(value = status, onValueChange = { status = it }, label = { Text("Trạng thái") }, modifier = Modifier.fillMaxWidth(), singleLine = true, shape = CutCornerShape(8.dp), colors = fieldColors) }
+                item { OutlinedTextField(value = note, onValueChange = { note = it }, label = { Text("Ghi chú / điều khoản") }, modifier = Modifier.fillMaxWidth(), minLines = 2, shape = CutCornerShape(8.dp), colors = fieldColors) }
+                localError?.let { item { Text(it, color = Color(0xFFFCA5A5), style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.Medium) } }
             }
         },
         confirmButton = {
-            Button(
-                onClick = {
-                    if (roomId.isBlank() || tenantUsername.isBlank() || startDate.isBlank() || endDate.isBlank()) {
-                        localError = "Vui lòng nhập đủ mã phòng, người thuê, ngày bắt đầu và ngày kết thúc."
-                    } else {
-                        onSave(roomId.trim(), tenantUsername.trim(), startDate.trim(), endDate.trim(), deposit.trim(), note.trim(), status.trim())
+            Box(
+                modifier = Modifier
+                    .clip(CutCornerShape(10.dp))
+                    .background(Brush.horizontalGradient(listOf(Color(0xFF0F766E), Color(0xFF0369A1))))
+                    .clickable {
+                        if (roomId.isBlank() || tenantUsername.isBlank() || startDate.isBlank() || endDate.isBlank()) {
+                            localError = "Vui lòng nhập đủ mã phòng, người thuê, ngày bắt đầu và kết thúc."
+                        } else onSave(roomId.trim(), tenantUsername.trim(), startDate.trim(), endDate.trim(), deposit.trim(), note.trim(), status.trim())
                     }
-                },
-                shape = RoundedCornerShape(8.dp),
-                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF6366F1))
-            ) {
-                Text("Lưu hợp đồng", fontWeight = FontWeight.Bold)
-            }
+                    .padding(horizontal = 20.dp, vertical = 10.dp)
+            ) { Text("Lưu hợp đồng", color = Color.White, fontWeight = FontWeight.Bold) }
         },
-        dismissButton = { TextButton(onClick = onDismiss) { Text("Hủy") } }
+        dismissButton = { TextButton(onClick = onDismiss) { Text("Hủy", color = Color(0xFF34D399)) } },
+        containerColor = Color(0xFF064E3B),
+        titleContentColor = Color.White,
+        shape = CutCornerShape(20.dp)
     )
 }
 
@@ -229,10 +185,15 @@ internal fun RenewRequestDialog(contract: RentalItem, onDismiss: () -> Unit, onS
     var note by remember(contract) { mutableStateOf("Mình muốn gia hạn hợp đồng này.") }
     var localError by remember { mutableStateOf<String?>(null) }
 
+    val fieldColors = OutlinedTextFieldDefaults.colors(
+        focusedTextColor = Color.White, unfocusedTextColor = Color.White,
+        focusedBorderColor = Color(0xFF34D399), unfocusedBorderColor = Color.White.copy(alpha = 0.3f),
+        cursorColor = Color(0xFF34D399), focusedLabelColor = Color(0xFF34D399), unfocusedLabelColor = Color.White.copy(alpha = 0.55f)
+    )
+
     AlertDialog(
         onDismissRequest = onDismiss,
-        shape = RoundedCornerShape(16.dp),
-        title = { Text("Gửi yêu cầu gia hạn", fontWeight = FontWeight.Bold, color = Color(0xFF1E293B)) },
+        title = { Text("Gửi yêu cầu gia hạn", fontWeight = FontWeight.Bold, color = Color.White) },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
                 DetailRow("Hợp đồng", contract.title)
@@ -241,29 +202,32 @@ internal fun RenewRequestDialog(contract: RentalItem, onDismiss: () -> Unit, onS
                     value = newEndDate, onValueChange = { newEndDate = it },
                     label = { Text("Ngày kết thúc mới") },
                     modifier = Modifier.fillMaxWidth(), singleLine = true,
-                    shape = RoundedCornerShape(8.dp)
+                    shape = CutCornerShape(8.dp), colors = fieldColors
                 )
                 OutlinedTextField(
                     value = note, onValueChange = { note = it },
                     label = { Text("Ghi chú") },
                     modifier = Modifier.fillMaxWidth(), minLines = 2,
-                    shape = RoundedCornerShape(8.dp)
+                    shape = CutCornerShape(8.dp), colors = fieldColors
                 )
-                localError?.let { Text(it, color = Color(0xFFEF4444), style = MaterialTheme.typography.bodySmall) }
+                localError?.let { Text(it, color = Color(0xFFFCA5A5), style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.Medium) }
             }
         },
         confirmButton = {
-            Button(
-                onClick = {
-                    if (newEndDate.isBlank()) localError = "Vui lòng nhập ngày kết thúc mới." else onSubmit(newEndDate.trim(), note.trim())
-                },
-                shape = RoundedCornerShape(8.dp),
-                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFA855F7))
-            ) {
-                Text("Gửi gia hạn", fontWeight = FontWeight.Bold)
-            }
+            Box(
+                modifier = Modifier
+                    .clip(CutCornerShape(10.dp))
+                    .background(Brush.horizontalGradient(listOf(Color(0xFF0F766E), Color(0xFF0369A1))))
+                    .clickable {
+                        if (newEndDate.isBlank()) localError = "Vui lòng nhập ngày kết thúc mới." else onSubmit(newEndDate.trim(), note.trim())
+                    }
+                    .padding(horizontal = 20.dp, vertical = 10.dp)
+            ) { Text("Gửi gia hạn", color = Color.White, fontWeight = FontWeight.Bold) }
         },
-        dismissButton = { TextButton(onClick = onDismiss) { Text("Hủy") } }
+        dismissButton = { TextButton(onClick = onDismiss) { Text("Hủy", color = Color(0xFF34D399)) } },
+        containerColor = Color(0xFF064E3B),
+        titleContentColor = Color.White,
+        shape = CutCornerShape(20.dp)
     )
 }
 
