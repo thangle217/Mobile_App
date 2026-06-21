@@ -35,6 +35,12 @@ import androidx.compose.material3.*
 import androidx.compose.ui.graphics.vector.path
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.PathFillType
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.graphics.CompositingStrategy
+import androidx.compose.ui.draw.drawWithCache
+import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.drawscope.withTransform
+import androidx.compose.ui.graphics.BlendMode
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -317,40 +323,31 @@ internal fun LoginScreen(repository: RentalRepository, onLoggedIn: (UserSession)
                 .fillMaxWidth()
                 .padding(horizontal = 24.dp)
         ) {
-            // Glowing border animation - warm white sunlight
+            // Glowing border animation - neon running light
             val infiniteTransition = rememberInfiniteTransition(label = "eyecatcher")
-            val glowAlpha by infiniteTransition.animateFloat(
-                initialValue = 0.2f,
-                targetValue = 1f,
-                animationSpec = infiniteRepeatable(
-                    animation = tween(1400, easing = FastOutSlowInEasing),
-                    repeatMode = RepeatMode.Reverse
-                ),
-                label = "glow"
-            )
-            val glowWidth by infiniteTransition.animateFloat(
-                initialValue = 1f,
-                targetValue = 4f,
-                animationSpec = infiniteRepeatable(
-                    animation = tween(1400, easing = FastOutSlowInEasing),
-                    repeatMode = RepeatMode.Reverse
-                ),
-                label = "glowWidth"
+            val rotation by infiniteTransition.animateFloat(
+                initialValue = 0f, targetValue = 360f,
+                animationSpec = infiniteRepeatable(tween(2500, easing = androidx.compose.animation.core.LinearEasing), RepeatMode.Restart),
+                label = "rotation"
             )
 
-            // Glassmorphism Card
-            Column(
+            // Glassmorphism Card Wrapper
+            Box(
                 modifier = Modifier
                     .padding(top = 40.dp) // Space for the top hexagon
                     .fillMaxWidth()
-                    .clip(CutCornerShape(40.dp))
-                    .background(Color.White.copy(alpha = 0.25f))
-                    .border(glowWidth.dp, Color.White.copy(alpha = glowAlpha), CutCornerShape(40.dp))
-                    .padding(horizontal = 24.dp, vertical = 32.dp)
-                    .verticalScroll(rememberScrollState()),
-                horizontalAlignment = Alignment.CenterHorizontally
             ) {
-                Spacer(modifier = Modifier.height(24.dp))
+                // Main Content
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(CutCornerShape(40.dp))
+                        .background(Color.White.copy(alpha = 0.25f))
+                        .padding(horizontal = 24.dp, vertical = 32.dp)
+                        .verticalScroll(rememberScrollState()),
+                    horizontalAlignment = Alignment.CenterHorizontally
+                ) {
+                    Spacer(modifier = Modifier.height(24.dp))
                 
                 Text(
                     text = authTitle(mode, forgotPasswordStep),
@@ -583,6 +580,33 @@ internal fun LoginScreen(repository: RentalRepository, onLoggedIn: (UserSession)
                         }
                     }
                 }
+                
+                // Neon Border Layer
+                Box(
+                    modifier = Modifier
+                        .matchParentSize()
+                        .graphicsLayer { compositingStrategy = CompositingStrategy.Offscreen }
+                        .drawWithCache {
+                            val outline = CutCornerShape(40.dp).createOutline(size, layoutDirection, this)
+                            onDrawWithContent {
+                                androidx.compose.ui.graphics.drawscope.drawOutline(
+                                    outline = outline,
+                                    color = Color.Black,
+                                    style = Stroke(6.dp.toPx())
+                                )
+                                withTransform({
+                                    rotate(rotation, center = androidx.compose.ui.geometry.Offset(size.width / 2, size.height / 2))
+                                }) {
+                                    drawRect(
+                                        brush = Brush.sweepGradient(
+                                            colors = listOf(Color.Transparent, Color(0xFF34D399), Color.White, Color(0xFF34D399), Color.Transparent)
+                                        ),
+                                        blendMode = BlendMode.SrcIn
+                                    )
+                                }
+                            }
+                        }
+                )
             }
 
             // Top Hexagon Logo with tap bounce animation
