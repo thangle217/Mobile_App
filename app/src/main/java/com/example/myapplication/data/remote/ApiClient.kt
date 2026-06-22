@@ -1,4 +1,4 @@
-package com.example.myapplication.data.remote
+﻿package com.example.myapplication.data.remote
 
 import com.example.myapplication.domain.model.AppScreen
 import com.example.myapplication.domain.model.AccountProfile
@@ -143,7 +143,6 @@ class ApiClient(
 
     private fun endpointFor(screen: AppScreen): String? = when (screen) {
         AppScreen.Houses -> "api/NhaTro"
-        AppScreen.RoomTypes -> "api/LoaiPhong"
         AppScreen.Rooms -> "api/Phong"
         AppScreen.Tenants -> "api/NguoiThue"
         AppScreen.Contracts -> "api/HopDong"
@@ -265,3 +264,4 @@ private fun JSONObject.optLongAny(vararg keys: String): Long = keys.firstNotNull
         else -> null
     }
 } ?: 0L
+

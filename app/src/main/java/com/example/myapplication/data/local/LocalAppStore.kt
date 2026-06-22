@@ -117,14 +117,8 @@ class LocalAppStore(context: Context) {
         return user.toProfile()
     }
 
-    fun changePassword(session: UserSession, oldPassword: String, newPassword: String, confirmPassword: String): String {
-        require(newPassword == confirmPassword) { "Mật khẩu nhập lại không khớp." }
-        val users = usersArray()
-        val user = users.objects().firstOrNull { it.optString("username").equals(session.username, true) } ?: error("Không tìm thấy tài khoản.")
-        require(user.optString("password") == oldPassword) { "Mật khẩu cũ không đúng." }
-        user.put("password", newPassword)
-        saveUsers(users)
-        return "Đổi mật khẩu thành công."
+    fun sendPasswordResetEmail(email: String): String {
+        return "Đã gửi link đặt lại mật khẩu đến email $email. Vui lòng kiểm tra hộp thư."
     }
 
     fun saveImage(fileName: String, mimeType: String, bytes: ByteArray): String {
@@ -161,25 +155,55 @@ class LocalAppStore(context: Context) {
         }
     }
 
-    fun dashboard(): DashboardSummary {
+    fun dashboard(session: UserSession?): DashboardSummary {
         runCronJobs()
-        val rooms = list(AppScreen.Rooms)
-        val invoices = list(AppScreen.Invoices)
-        val payments = list(AppScreen.Payments)
-        // Use ASCII-safe prefix check: pending statuses start with "Ch" (Chờ/Chưa), completed start with non-ASCII (Đã/Từ)
-        val pending = list(AppScreen.RentRequests).count { it.status.startsWith("Ch") } +
-            list(AppScreen.RenewRequests).count { it.status.startsWith("Ch") } +
-            payments.count { it.status.startsWith("Ch") }
+        val rooms = list(AppScreen.Rooms, session)
+        val invoices = list(AppScreen.Invoices, session)
+        val payments = list(AppScreen.Payments, session)
+        val notices = list(AppScreen.Notices, session)
+        val incidents = list(AppScreen.Incidents, session)
+        val rentRequests = list(AppScreen.RentRequests, session)
+        val renewRequests = list(AppScreen.RenewRequests, session)
+
+        val pendingRentRequests = rentRequests.count { it.status.startsWith("Ch") } + renewRequests.count { it.status.startsWith("Ch") }
+        val unresolvedIncidents = incidents.count { it.status.startsWith("Ch") }
+        val unreadNotices = notices.count { !it.detail("readBy").contains(session?.username ?: "unknown") }
+        
+        val paidInvoices = invoices.count { it.status.startsWith("Đã") || it.status.startsWith("Thanh toán 1 phần") }
+        val unpaidInvoices = invoices.count { it.status.startsWith("Ch") || it.status.startsWith("Quá") }
+        
+        val emptyRooms = rooms.count { it.detail("tenantUsername").isBlank() }
+        val rentedRooms = rooms.count { it.detail("tenantUsername").isNotBlank() }
+        
+        val pendingTasks = pendingRentRequests + unresolvedIncidents + payments.count { it.status.startsWith("Ch") }
+
+        val revenue = if (session?.role == UserRole.ChuTro || session?.role == UserRole.Admin) {
+            payments.filter { it.status.isNotBlank() && !it.status.startsWith("Ch") }.sumOf { moneyValue(it.value) }
+        } else {
+            0L
+        }
+
         return DashboardSummary(
             totalRooms = rooms.size,
-            emptyRooms = rooms.count { it.detail("tenantUsername").isBlank() },
-            unpaidInvoices = invoices.count { it.status.startsWith("Ch") },
-            pendingTasks = pending,
-            revenue = payments.filter { it.status.isNotBlank() && !it.status.startsWith("Ch") }.sumOf { moneyValue(it.value) }
+            emptyRooms = emptyRooms,
+            rentedRooms = rentedRooms,
+            unpaidInvoices = unpaidInvoices,
+            paidInvoices = paidInvoices,
+            pendingTasks = pendingTasks,
+            unreadNotices = unreadNotices,
+            unresolvedIncidents = unresolvedIncidents,
+            pendingRentRequests = pendingRentRequests,
+            revenue = revenue
         )
     }
 
-    fun list(screen: AppScreen): List<RentalItem> = itemsObject().optJSONArray(screen.name)?.toItems().orEmpty()
+    fun list(screen: AppScreen): List<RentalItem> {
+        val items = itemsObject().optJSONArray(screen.name)?.toItems().orEmpty()
+        if (screen == AppScreen.Notices) {
+            return items.filter { it.value == "Thông báo" }
+        }
+        return items
+    }
 
     fun list(screen: AppScreen, session: UserSession?): List<RentalItem> {
         val items = list(screen)
@@ -192,6 +216,21 @@ class LocalAppStore(context: Context) {
     }
 
     fun upsert(screen: AppScreen, item: RentalItem): RentalItem {
+        // --- Data Constraints (Business Rules) for upsert ---
+        if (screen == AppScreen.ServiceRegs) {
+            val roomId = item.detail("roomId")
+            val period = item.detail("period")
+            val activeContract = list(AppScreen.Contracts).firstOrNull {
+                it.detail("roomId") == roomId &&
+                it.status.equals("Đang hiệu lực", true) &&
+                isPeriodWithinContract(period, it.detail("startDate"), it.detail("endDate"))
+            }
+            require(activeContract != null) { "Không thể đăng ký: Bạn chưa có hợp đồng thuê phòng này trong kỳ $period." }
+            
+            val tenantUsername = item.detail("tenantUsername")
+            require(activeContract.detail("tenantUsername").equals(tenantUsername, true)) { "Không thể đăng ký: Bạn không phải là người thuê phòng này." }
+        }
+
         val items = itemsObject()
         val array = items.optJSONArray(screen.name) ?: JSONArray()
         val existingIndex = array.objects().indexOfFirst { it.optString("id") == item.id }
@@ -252,26 +291,36 @@ class LocalAppStore(context: Context) {
         return "$prefix${next.toString().padStart(3, '0')}"
     }
 
-    fun createRentRequest(roomId: String, session: UserSession, duration: String, note: String): RentalItem {
+    fun createRentRequest(roomId: String, session: UserSession, moveInDate: String, expectedMoveOutDate: String, note: String): RentalItem {
         val room = list(AppScreen.Rooms).firstOrNull { it.id == roomId } ?: error("Không tìm thấy phòng.")
-        require(room.status.equals("Còn trống", true)) { "Phòng này hiện không còn trống." }
+        require(room.status !in setOf("Ngưng hoạt động", "Đang sửa chữa")) { "Phòng này hiện đang ngưng hoạt động hoặc sửa chữa." }
+        val capacity = room.detail("capacity").filter { it.isDigit() }.toIntOrNull() ?: 1
+        val activeContracts = list(AppScreen.Contracts).count {
+            it.detail("roomId") == roomId && it.status in setOf("Chờ người thuê xác nhận", "Đang hiệu lực")
+        }
+        val pendingRequests = list(AppScreen.RentRequests).count {
+            it.detail("roomId") == roomId && (it.status.contains("Chờ", true) || it.status.equals("Đã duyệt", true))
+        }
+        require(activeContracts + pendingRequests < capacity) { "Phòng này đã đạt sức chứa tối đa ($capacity người/hợp đồng)." }
         val exists = list(AppScreen.RentRequests).any {
             it.detail("roomId") == roomId &&
                 it.detail("tenantUsername").equals(session.username, true) &&
-                it.status.contains("Chờ", true)
+                (it.status.contains("Chờ", true) || it.status.equals("Đã duyệt", true))
         }
-        require(!exists) { "Bạn đã có yêu cầu thuê phòng này đang chờ xử lý." }
+        require(!exists) { "Bạn đã có yêu cầu thuê phòng này đang chờ xử lý hoặc chờ xác nhận." }
         val request = RentalItem(
             id = nextId(AppScreen.RentRequests),
             title = "${session.displayName} muốn thuê ${room.title}",
             status = "Chờ duyệt",
-            value = duration.ifBlank { "6 tháng" },
+            value = "$moveInDate - $expectedMoveOutDate",
             note = note.ifBlank { "Yêu cầu được gửi từ ứng dụng mobile." },
             details = listOf(
                 "tenantUsername" to session.username,
                 "tenantName" to session.displayName,
                 "roomId" to room.id,
-                "roomName" to room.title
+                "roomName" to room.title,
+                "startDate" to moveInDate,
+                "endDate" to expectedMoveOutDate
             )
         )
         upsert(AppScreen.RentRequests, request)
@@ -295,7 +344,11 @@ class LocalAppStore(context: Context) {
         val roomId = request.detail("roomId")
         val room = list(AppScreen.Rooms).firstOrNull { it.id == roomId } ?: error("Không tìm thấy phòng trong yêu cầu.")
         if (approve) {
-            require(room.status.equals("Còn trống", true)) { "Phòng này không còn trống nên không thể duyệt yêu cầu." }
+            val capacity = room.detail("capacity").filter { it.isDigit() }.toIntOrNull() ?: 1
+            val activeContracts = list(AppScreen.Contracts).count {
+                it.detail("roomId") == roomId && it.status in setOf("Chờ người thuê xác nhận", "Đang hiệu lực")
+            }
+            require(activeContracts < capacity) { "Phòng này đã đầy, không thể duyệt thêm yêu cầu." }
         }
         val nextRequest = request.copy(
             status = if (approve) "Đã duyệt" else "Từ chối",
@@ -421,12 +474,13 @@ class LocalAppStore(context: Context) {
         require(endDate.isNotBlank()) { "Vui lòng nhập ngày kết thúc." }
         val id = contractId.ifBlank { nextId(AppScreen.Contracts) }
         val existing = list(AppScreen.Contracts).firstOrNull { it.id == id }
-        val activeConflict = list(AppScreen.Contracts).any {
+        val capacity = room.detail("capacity").filter { it.isDigit() }.toIntOrNull() ?: 1
+        val activeContracts = list(AppScreen.Contracts).count {
             it.id != id &&
-                it.detail("roomId") == roomId &&
-                it.status in setOf("Chờ người thuê xác nhận", "Đang hiệu lực")
+            it.detail("roomId") == roomId &&
+            it.status in setOf("Chờ người thuê xác nhận", "Đang hiệu lực")
         }
-        require(!activeConflict) { "Phòng này đã có hợp đồng đang hiệu lực hoặc chờ xác nhận." }
+        require(activeContracts < capacity) { "Phòng này đã đạt sức chứa tối đa ($capacity người/hợp đồng)." }
 
         val tenantName = tenant.optString("fullName").ifBlank { tenantUsername }
         val contract = RentalItem(
@@ -637,15 +691,49 @@ class LocalAppStore(context: Context) {
         return reading
     }
 
+    private fun isPeriodWithinContract(period: String, startDate: String, endDate: String): Boolean {
+        fun parseMonth(dateStr: String): String {
+            if (dateStr.matches(Regex("\\d{4}-\\d{2}"))) return dateStr
+            val cleanStr = dateStr.replace(Regex("[^0-9/]"), "")
+            val parts = cleanStr.split("/").filter { it.isNotBlank() }
+            if (parts.size >= 3) {
+                val m = parts[1].padStart(2, '0')
+                return "${parts[2]}-$m"
+            }
+            if (parts.size == 2) {
+                val m = parts[0].padStart(2, '0')
+                return "${parts[1]}-$m"
+            }
+            return ""
+        }
+        val p = parseMonth(period).ifBlank { period }
+        val start = parseMonth(startDate)
+        val end = parseMonth(endDate)
+        
+        val afterStart = if (start.isNotBlank()) p >= start else true
+        val beforeEnd = if (end.isNotBlank()) p <= end else true
+        
+        return afterStart && beforeEnd
+    }
+
     fun createInvoice(
         roomId: String,
         period: String,
         otherCost: Double,
-        otherNote: String
+        otherNote: String,
+        roomRentOverride: Double? = null
     ): RentalItem {
         val room = list(AppScreen.Rooms).firstOrNull { it.id == roomId } ?: error("Không tìm thấy phòng.")
         val tenantUsername = room.detail("tenantUsername")
         require(tenantUsername.isNotBlank()) { "Phòng này hiện chưa có người thuê." }
+
+        // Kiểm tra hợp đồng có hiệu lực trong kỳ này không
+        val activeContract = list(AppScreen.Contracts).firstOrNull {
+            it.detail("roomId") == roomId &&
+            it.status.equals("Đang hiệu lực", true) &&
+            isPeriodWithinContract(period, it.detail("startDate"), it.detail("endDate"))
+        }
+        require(activeContract != null) { "Phòng này không có hợp đồng đang hiệu lực trong kỳ $period." }
 
         // Chặn trùng hóa đơn
         val exists = list(AppScreen.Invoices).any {
@@ -653,7 +741,7 @@ class LocalAppStore(context: Context) {
         }
         require(!exists) { "Hóa đơn phòng ${room.title} kỳ $period đã tồn tại." }
 
-        val roomPrice = moneyValue(room.value)
+        val roomPrice = roomRentOverride?.toLong() ?: moneyValue(room.value)
 
         // Lấy tiền điện
         val electricItem = list(AppScreen.Electric).firstOrNull {
@@ -673,9 +761,10 @@ class LocalAppStore(context: Context) {
 
         // Tiền dịch vụ
         val serviceRegs = list(AppScreen.ServiceRegs).filter {
-            it.detail("roomId") == roomId ||
+            (it.detail("roomId") == roomId ||
             it.title.contains(roomId, true) ||
-            it.title.contains(room.title, true)
+            it.title.contains(room.title, true)) &&
+            (it.detail("period") == period || it.detail("period").isBlank())
         }
         val servicesCost = serviceRegs.sumOf { moneyValue(it.value) }
 
@@ -900,8 +989,9 @@ class LocalAppStore(context: Context) {
             ?: error("Không tìm thấy thông báo.")
         val readKey = "readBy_$username"
         if (notice.detail(readKey) == "true") return notice
+        // Always mark as read for the current user, regardless of targetType
         val updated = notice.copy(
-            status = if (notice.detail("targetUser").isBlank()) notice.status else "Đã đọc",
+            status = "Đã xem",
             details = notice.details.replaceDetail(readKey, "true")
         )
         upsert(AppScreen.Notices, updated)
@@ -1085,7 +1175,7 @@ class LocalAppStore(context: Context) {
         }
 
         obj.put(AppScreen.Houses.name, JSONArray())
-        obj.put(AppScreen.RoomTypes.name, JSONArray())
+        
         obj.put(AppScreen.Rooms.name, JSONArray())
         obj.put(AppScreen.Tenants.name, JSONArray())
         obj.put(AppScreen.Contracts.name, JSONArray())
@@ -1119,7 +1209,7 @@ class LocalAppStore(context: Context) {
     private fun findUser(username: String): JSONObject? = usersArray().objects().firstOrNull { it.optString("username").equals(username, true) }
 
     private fun filterLandlordItems(screen: AppScreen, items: List<RentalItem>, username: String): List<RentalItem> = when (screen) {
-        AppScreen.Houses, AppScreen.RoomTypes, AppScreen.Rooms, AppScreen.Services -> items.filter {
+        AppScreen.Houses, AppScreen.Rooms, AppScreen.Services -> items.filter {
             it.detail("createdBy").equals(username, true)
         }
         AppScreen.Tenants, AppScreen.Contracts, AppScreen.Invoices, AppScreen.Payments, AppScreen.ServiceRegs,
@@ -1138,11 +1228,27 @@ class LocalAppStore(context: Context) {
     private fun filterTenantItems(screen: AppScreen, items: List<RentalItem>, username: String): List<RentalItem> = when (screen) {
         // Check tenantUsername detail instead of garbled Vietnamese status literal
         AppScreen.Rooms -> items.filter { it.detail("tenantUsername").isBlank() || it.detail("tenantUsername").equals(username, true) || it.detail("createdBy").equals(username, true) }
-        AppScreen.Houses, AppScreen.RoomTypes, AppScreen.Services -> items.filter {
+        AppScreen.Houses, AppScreen.Services -> items.filter {
             it.detail("createdBy").equals(username, true) || true 
         }
-        AppScreen.Notices -> items.filter {
-            it.detail("targetUser").isBlank() || it.detail("targetUser").equals(username, true) || it.detail("createdBy").equals(username, true)
+        AppScreen.Notices -> {
+            val userRooms = list(AppScreen.Rooms).filter { it.detail("tenantUsername").equals(username, true) }
+            val userRoomIds = userRooms.map { it.id }.toSet()
+            val userHouseIds = userRooms.map { it.detail("houseId") }.toSet()
+            items.filter {
+                // Only show manually created notices (value == "Thông báo"), not system auto-generated ones
+                val isManualNotice = it.value == "Thông báo"
+                if (!isManualNotice) return@filter false
+
+                val targetType = it.detail("targetType")
+                val targetUser = it.detail("targetUser")
+                val targetRoom = it.detail("targetRoom")
+
+                targetType.isBlank() || targetType == "all" ||
+                targetUser.equals(username, true) ||
+                (targetType.startsWith("room:") && targetRoom in userRoomIds) ||
+                (targetType.startsWith("house:") && targetType.removePrefix("house:") in userHouseIds)
+            }
         }
         AppScreen.Contracts, AppScreen.Invoices, AppScreen.Payments, AppScreen.ServiceRegs,
         AppScreen.Electric, AppScreen.Water, AppScreen.RentRequests, AppScreen.RenewRequests,

@@ -10,13 +10,13 @@ interface IRentalRepository {
     suspend fun resetPassword(email: String, token: String, newPassword: String, confirmPassword: String): Result<String>
     suspend fun account(session: UserSession): UiState<AccountProfile>
     suspend fun updateAccount(session: UserSession, profile: AccountProfile): Result<AccountProfile>
-    suspend fun changePassword(session: UserSession, oldPassword: String, newPassword: String, confirmPassword: String): Result<String>
+    suspend fun sendPasswordResetEmail(email: String): Result<String>
     suspend fun uploadCccdImage(fileName: String, mimeType: String, bytes: ByteArray, session: UserSession? = null): Result<String>
     suspend fun dashboard(session: UserSession?): UiState<DashboardSummary>
     suspend fun list(screen: AppScreen, session: UserSession?): UiState<List<RentalItem>>
     suspend fun saveItem(screen: AppScreen, item: RentalItem, session: UserSession?): Result<RentalItem>
     suspend fun deleteItem(screen: AppScreen, id: String, session: UserSession?): Result<Unit>
-    suspend fun requestRoom(roomId: String, session: UserSession?, duration: String, note: String): Result<RentalItem>
+    suspend fun requestRoom(roomId: String, session: UserSession?, moveInDate: String, expectedMoveOutDate: String, note: String): Result<RentalItem>
     suspend fun decideRentRequest(requestId: String, approve: Boolean, session: UserSession?): Result<RentalItem>
     suspend fun tenantConfirmRentRequest(requestId: String, session: UserSession?): Result<RentalItem>
     suspend fun confirmContract(contractId: String, approve: Boolean, session: UserSession?): Result<RentalItem>
@@ -49,7 +49,8 @@ interface IRentalRepository {
         period: String,
         otherCost: Double,
         otherNote: String,
-        session: UserSession?
+        session: UserSession?,
+        roomRentOverride: Double? = null
     ): Result<RentalItem>
     suspend fun submitPayment(
         invoiceId: String,

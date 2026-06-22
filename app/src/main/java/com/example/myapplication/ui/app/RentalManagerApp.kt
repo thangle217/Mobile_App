@@ -21,6 +21,14 @@ import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.material.icons.filled.Bolt
+import androidx.compose.material.icons.filled.WaterDrop
+import androidx.compose.material.icons.filled.Payments
+import androidx.compose.material.icons.filled.Lightbulb
+import androidx.compose.material.icons.filled.BarChart
+import androidx.compose.material.icons.filled.MeetingRoom
+import androidx.compose.material.icons.filled.Article
+import androidx.compose.material.icons.automirrored.filled.List
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -48,14 +56,23 @@ import kotlinx.coroutines.launch
 
 val LocalAppThemeIsLight = compositionLocalOf { false }
 
+
+
 fun AppScreen.getIcon(): ImageVector {
     return when (this) {
-        AppScreen.Dashboard -> Icons.Default.Home
+        AppScreen.Dashboard -> Icons.Default.BarChart
+        AppScreen.Houses -> Icons.Default.Home
+        AppScreen.Rooms -> Icons.Default.MeetingRoom
+        AppScreen.Contracts, AppScreen.RenewRequests -> Icons.Default.Article
+        AppScreen.RentRequests -> Icons.Default.Info
         AppScreen.Account, AppScreen.Tenants, AppScreen.Users -> Icons.Default.Person
         AppScreen.Notices -> Icons.Default.Notifications
         AppScreen.Incidents -> Icons.Default.Warning
-        AppScreen.Electric, AppScreen.Water -> Icons.Default.Info
-        else -> Icons.Default.List
+        AppScreen.Electric -> Icons.Default.Bolt
+        AppScreen.Water -> Icons.Default.WaterDrop
+        AppScreen.Invoices, AppScreen.Payments -> Icons.Default.Payments
+        AppScreen.Services, AppScreen.ServiceRegs -> Icons.Default.Lightbulb
+        else -> Icons.AutoMirrored.Filled.List
     }
 }
 
@@ -63,10 +80,18 @@ fun AppScreen.getIcon(): ImageVector {
 
 @Composable
 fun RentalManagerApp() {
-    val context = LocalContext.current
-    val repository = remember(context) { RentalRepository(context) }
-    val sessionStore = remember { SessionStore(context) }
+    val localCtx = LocalContext.current
+    val repository = remember(localCtx) { RentalRepository(localCtx) }
+    val sessionStore = remember { SessionStore(localCtx) }
     val scope = rememberCoroutineScope()
+    var globalError by remember { mutableStateOf<String?>(null) }
+    var errorKey by remember { mutableStateOf(0) }
+    androidx.compose.runtime.LaunchedEffect(globalError, errorKey) {
+        if (globalError != null) {
+            kotlinx.coroutines.delay(4000)
+            globalError = null
+        }
+    }
     var restored by remember { mutableStateOf(false) }
     var session by remember { mutableStateOf<UserSession?>(null) }
     var screen by remember { mutableStateOf(AppScreen.Dashboard) }
@@ -94,18 +119,34 @@ fun RentalManagerApp() {
         )
     } else {
         CompositionLocalProvider(LocalAppThemeIsLight provides isLightMode) {
-            MainShell(
-                repository = repository,
-                session = session,
-                screen = screen,
-                onScreenChange = { screen = it },
-                onLogout = {
-                    scope.launch { sessionStore.clear() }
-                    session = null
-                    screen = AppScreen.Dashboard
-                },
-                onToggleTheme = { isLightMode = !isLightMode }
-            )
+            Box(modifier = Modifier.fillMaxSize()) {
+                MainShell(
+                    repository = repository,
+                    session = session,
+                    screen = screen,
+                    onScreenChange = { screen = it },
+                    onLogout = {
+                        scope.launch { sessionStore.clear() }
+                        session = null
+                        screen = AppScreen.Dashboard
+                    },
+                    onToggleTheme = { isLightMode = !isLightMode },
+                    onShowError = { msg -> globalError = msg; errorKey++ }
+                )
+                if (globalError != null) {
+                    AlertDialog(
+                        onDismissRequest = { globalError = null },
+                        title = { Text("Thông báo", color = Color.White, fontWeight = FontWeight.Bold) },
+                        text = { Text(globalError ?: "", color = Color(0xFFFCA5A5), fontWeight = FontWeight.Medium) },
+                        confirmButton = {
+                            TextButton(onClick = { globalError = null }) { Text("Đóng", color = Color(0xFF34D399)) }
+                        },
+                        containerColor = Color(0xFF064E3B),
+                        titleContentColor = Color.White,
+                        shape = CutCornerShape(20.dp)
+                    )
+                }
+            }
         }
     }
 }
@@ -117,7 +158,8 @@ internal fun MainShell(
     screen: AppScreen,
     onScreenChange: (AppScreen) -> Unit,
     onLogout: () -> Unit,
-    onToggleTheme: () -> Unit
+    onToggleTheme: () -> Unit,
+    onShowError: (String) -> Unit
 ) {
     val role = session?.role ?: UserRole.ChuTro
     val screens = screensForRole(role)
@@ -193,11 +235,11 @@ internal fun MainShell(
             },
             containerColor = AppGreenDark
         ) { padding ->
-            Box(modifier = Modifier.padding(padding)) {
+            Box(modifier = Modifier.padding(padding).fillMaxSize()) {
                 when (screen) {
                     AppScreen.Dashboard -> DashboardScreen(repository, session, onScreenChange, onLogout)
-                    AppScreen.Account -> AccountScreen(repository, session, onLogout)
-                    else -> ModuleScreen(repository, session, screen, onLogout)
+                    AppScreen.Account -> AccountScreen(repository, session, onLogout, onShowError)
+                    else -> ModuleScreen(repository, session, screen, onLogout, onShowError)
                 }
             }
         }
@@ -209,8 +251,10 @@ internal fun ModuleScreen(
     repository: RentalRepository,
     session: UserSession?,
     screen: AppScreen,
-    onSessionExpired: () -> Unit
+    onSessionExpired: () -> Unit,
+    onShowError: (String) -> Unit
 ) {
+    val localCtx = LocalContext.current
     val scope = rememberCoroutineScope()
     var state by remember(screen, session) { mutableStateOf<UiState<List<RentalItem>>>(UiState.Loading) }
     var query by remember(screen) { mutableStateOf("") }
@@ -220,7 +264,6 @@ internal fun ModuleScreen(
     var contractEditing by remember { mutableStateOf<RentalItem?>(null) }
     var rentRequestRoom by remember { mutableStateOf<RentalItem?>(null) }
     var renewContract by remember { mutableStateOf<RentalItem?>(null) }
-    var actionError by remember { mutableStateOf<String?>(null) }
     var confirmData by remember { mutableStateOf<ConfirmData?>(null) }
     var houses by remember(screen) { mutableStateOf<List<RentalItem>>(emptyList()) }
     var rooms by remember(screen) { mutableStateOf<List<RentalItem>>(emptyList()) }
@@ -244,7 +287,7 @@ internal fun ModuleScreen(
     }
 
     LaunchedEffect(screen, session) {
-        if (screen in setOf(AppScreen.Rooms, AppScreen.RoomTypes, AppScreen.Contracts, AppScreen.RentRequests, AppScreen.RenewRequests, AppScreen.Notices)) {
+        if (screen in setOf(AppScreen.Rooms,  AppScreen.Contracts, AppScreen.RentRequests, AppScreen.RenewRequests, AppScreen.Notices)) {
             val result = repository.list(AppScreen.Houses, session)
             if (result is UiState.Content) houses = result.data
         }
@@ -264,7 +307,13 @@ internal fun ModuleScreen(
         val statuses = getScreenStatuses(screen, items)
         val filtered = items.filter {
             val textMatch = it.title.contains(query, true) || it.id.contains(query, true) || it.note.contains(query, true) || it.value.contains(query, true)
-            val statusMatch = status == "Tất cả" || it.status == status
+            val mappedStatus = when (it.status) {
+                "DangXuLy" -> "Đang xử lý"
+                "DaXuLy" -> "Đã khắc phục"
+                "KhongTheXuLy" -> "Không thể xử lý"
+                else -> it.status
+            }
+            val statusMatch = status == "Tất cả" || mappedStatus == status
             textMatch && statusMatch
         }
         LazyColumn(
@@ -283,8 +332,7 @@ internal fun ModuleScreen(
                         .clip(CutCornerShape(14.dp))
                         .background(Brush.horizontalGradient(listOf(AppGreenMid, Color(0xFF0369A1))))
                         .clickable {
-                            actionError = null
-                            if (screen == AppScreen.Contracts) {
+                                        if (screen == AppScreen.Contracts) {
                                 contractEditing = RentalItem("", "", "Chờ người thuê xác nhận", "", "")
                             } else if (screen == AppScreen.Notices) {
                                 noticeFormOpen = true
@@ -296,9 +344,6 @@ internal fun ModuleScreen(
                 ) {
                     Text("+ Thêm ${screen.label.lowercase()}", color = Color.White, fontWeight = FontWeight.Bold, letterSpacing = 1.sp)
                 }
-            }
-            actionError?.let {
-                item { Text(it, color = Color(0xFFFCA5A5), style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.Medium) }
             }
             if (items.isNotEmpty()) {
                 item {
@@ -316,26 +361,26 @@ internal fun ModuleScreen(
                 item { EmptyState("Không tìm thấy kết quả phù hợp với bộ lọc.") }
             } else {
                 items(filtered, key = { it.id }) { item ->
+                    val canEdit = canManage && !(role == UserRole.ChuTro && screen == AppScreen.RentRequests)
                     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                         RentalListCard(
                             screen = screen,
                             item = item,
                             canManage = canManage,
+                            canEdit = canEdit,
                             onOpen = { selected = item },
                             onEdit = {
-                                actionError = null
-                                if (screen == AppScreen.Contracts) contractEditing = item else editing = item
+                                                if (screen == AppScreen.Contracts) contractEditing = item else editing = item
                             },
                             onDelete = {
-                                actionError = null
-                                confirmData = ConfirmData(
+                                                confirmData = ConfirmData(
                                     title = "Xác nhận xóa",
                                     message = "Bạn có chắc chắn muốn xóa bản ghi này (${item.id})? Hành động này không thể hoàn tác.",
                                     onConfirm = {
                                         scope.launch {
                                             repository.deleteItem(screen, item.id, session)
                                                 .onSuccess { load() }
-                                                .onFailure { actionError = it.message ?: "Không thể xóa dữ liệu." }
+                                                .onFailure { onShowError(it.message ?: "Không thể xóa dữ liệu.") }
                                         }
                                     }
                                 )
@@ -354,7 +399,7 @@ internal fun ModuleScreen(
                                         scope.launch {
                                             repository.decideRentRequest(item.id, approve = true, session = session)
                                                 .onSuccess { load() }
-                                                .onFailure { actionError = it.message ?: "Không thể duyệt yêu cầu." }
+                                                .onFailure { onShowError(it.message ?: "Không thể duyệt yêu cầu.") }
                                         }
                                     }
                                 )
@@ -367,7 +412,7 @@ internal fun ModuleScreen(
                                         scope.launch {
                                             repository.decideRentRequest(item.id, approve = false, session = session)
                                                 .onSuccess { load() }
-                                                .onFailure { actionError = it.message ?: "Không thể từ chối yêu cầu." }
+                                                .onFailure { onShowError(it.message ?: "Không thể từ chối yêu cầu.") }
                                         }
                                     }
                                 )
@@ -380,7 +425,7 @@ internal fun ModuleScreen(
                                         scope.launch {
                                             repository.tenantConfirmRentRequest(item.id, session = session)
                                                 .onSuccess { load() }
-                                                .onFailure { actionError = it.message ?: "Không thể xác nhận yêu cầu thuê." }
+                                                .onFailure { onShowError(it.message ?: "Không thể xác nhận yêu cầu thuê.") }
                                         }
                                     }
                                 )
@@ -393,7 +438,7 @@ internal fun ModuleScreen(
                                         scope.launch {
                                             repository.confirmContract(item.id, approve = true, session = session)
                                                 .onSuccess { load() }
-                                                .onFailure { actionError = it.message ?: "Không thể xác nhận hợp đồng." }
+                                                .onFailure { onShowError(it.message ?: "Không thể xác nhận hợp đồng.") }
                                         }
                                     }
                                 )
@@ -406,7 +451,7 @@ internal fun ModuleScreen(
                                         scope.launch {
                                             repository.confirmContract(item.id, approve = false, session = session)
                                                 .onSuccess { load() }
-                                                .onFailure { actionError = it.message ?: "Không thể từ chối hợp đồng." }
+                                                .onFailure { onShowError(it.message ?: "Không thể từ chối hợp đồng.") }
                                         }
                                     }
                                 )
@@ -419,7 +464,7 @@ internal fun ModuleScreen(
                                         scope.launch {
                                             repository.closeContract(item.id, cancel = false, session = session)
                                                 .onSuccess { load() }
-                                                .onFailure { actionError = it.message ?: "Không thể kết thúc hợp đồng." }
+                                                .onFailure { onShowError(it.message ?: "Không thể kết thúc hợp đồng.") }
                                         }
                                     }
                                 )
@@ -432,7 +477,7 @@ internal fun ModuleScreen(
                                         scope.launch {
                                             repository.closeContract(item.id, cancel = true, session = session)
                                                 .onSuccess { load() }
-                                                .onFailure { actionError = it.message ?: "Không thể hủy hợp đồng." }
+                                                .onFailure { onShowError(it.message ?: "Không thể hủy hợp đồng.") }
                                         }
                                     }
                                 )
@@ -446,7 +491,7 @@ internal fun ModuleScreen(
                                         scope.launch {
                                             repository.decideRenewRequest(item.id, approve = true, session = session)
                                                 .onSuccess { load() }
-                                                .onFailure { actionError = it.message ?: "Không thể duyệt gia hạn." }
+                                                .onFailure { onShowError(it.message ?: "Không thể duyệt gia hạn.") }
                                         }
                                     }
                                 )
@@ -459,7 +504,7 @@ internal fun ModuleScreen(
                                         scope.launch {
                                             repository.decideRenewRequest(item.id, approve = false, session = session)
                                                 .onSuccess { load() }
-                                                .onFailure { actionError = it.message ?: "Không thể từ chối gia hạn." }
+                                                .onFailure { onShowError(it.message ?: "Không thể từ chối gia hạn.") }
                                         }
                                     }
                                 )
@@ -473,7 +518,7 @@ internal fun ModuleScreen(
                                         scope.launch {
                                             repository.decidePayment(item.id, approve = true, rejectReason = null, session = session)
                                                 .onSuccess { load() }
-                                                .onFailure { actionError = it.message ?: "Không thể duyệt thanh toán." }
+                                                .onFailure { onShowError(it.message ?: "Không thể duyệt thanh toán.") }
                                         }
                                     }
                                 )
@@ -528,35 +573,31 @@ internal fun ModuleScreen(
             invoices = invoices,
             onDismiss = { editing = null },
             onSaveUtility = { scr, rId, prd, oldVal, newVal, unitPr ->
-                actionError = null
                 scope.launch {
                     repository.saveUtilityReading(scr, rId, prd, oldVal, newVal, unitPr, session)
                         .onSuccess { editing = null; load() }
-                        .onFailure { actionError = it.message ?: "Không thể lưu chỉ số." }
+                        .onFailure { onShowError(it.message ?: "Không thể lưu chỉ số.") }
                 }
             },
-            onSaveInvoice = { rId, prd, extra, note ->
-                actionError = null
+            onSaveInvoice = { rId, prd, extra, note, roomRent ->
                 scope.launch {
-                    repository.createInvoice(rId, prd, extra, note, session)
+                    repository.createInvoice(rId, prd, extra, note, session, roomRent)
                         .onSuccess { editing = null; load() }
-                        .onFailure { actionError = it.message ?: "Không thể tạo hóa đơn." }
+                        .onFailure { onShowError(it.message ?: "Không thể tạo hóa đơn.") }
                 }
             },
             onSavePayment = { invId, txId, img, note ->
-                actionError = null
                 scope.launch {
                     repository.submitPayment(invId, txId, img, note, session)
                         .onSuccess { editing = null; load() }
-                        .onFailure { actionError = it.message ?: "Không thể gửi biên lai." }
+                        .onFailure { onShowError(it.message ?: "Không thể gửi biên lai.") }
                 }
             },
             onSave = { updated ->
-                actionError = null
                 scope.launch {
                     repository.saveItem(screen, updated, session)
                         .onSuccess { editing = null; load() }
-                        .onFailure { actionError = it.message ?: "Không thể lưu dữ liệu." }
+                        .onFailure { onShowError(it.message ?: "Không thể lưu dữ liệu.") }
                 }
             },
             repository = repository
@@ -570,7 +611,6 @@ internal fun ModuleScreen(
             rooms = rooms,
             onDismiss = { contractEditing = null },
             onSave = { rId, tenant, start, end, dep, note, status ->
-                actionError = null
                 val updated = item.copy(
                     title = "Hợp đồng phòng $rId",
                     status = status,
@@ -587,7 +627,7 @@ internal fun ModuleScreen(
                 scope.launch {
                     repository.saveItem(AppScreen.Contracts, updated, session)
                         .onSuccess { contractEditing = null; load() }
-                        .onFailure { actionError = it.message ?: "Không thể lưu hợp đồng." }
+                        .onFailure { onShowError(it.message ?: "Không thể lưu hợp đồng.") }
                 }
             }
         )
@@ -598,11 +638,10 @@ internal fun ModuleScreen(
             contract = contract,
             onDismiss = { renewContract = null },
             onSubmit = { newEnd, note ->
-                actionError = null
                 scope.launch {
                     repository.createRenewRequest(contract.id, session, newEnd, note)
                         .onSuccess { renewContract = null; load() }
-                        .onFailure { actionError = it.message ?: "Không thể gửi yêu cầu gia hạn." }
+                        .onFailure { onShowError(it.message ?: "Không thể gửi yêu cầu gia hạn.") }
                 }
             }
         )
@@ -612,12 +651,15 @@ internal fun ModuleScreen(
         RentRequestDialog(
             room = room,
             onDismiss = { rentRequestRoom = null },
-            onSubmit = { duration, note ->
-                actionError = null
+            onSubmit = { moveInDate, expectedMoveOutDate, note ->
                 scope.launch {
-                    repository.requestRoom(room.id, session, duration, note)
-                        .onSuccess { rentRequestRoom = null; load() }
-                        .onFailure { actionError = it.message ?: "Không thể gửi yêu cầu thuê phòng." }
+                    repository.requestRoom(room.id, session, moveInDate, expectedMoveOutDate, note)
+                        .onSuccess { 
+                            rentRequestRoom = null
+                            android.widget.Toast.makeText(localCtx, "Gửi yêu cầu thuê thành công!", android.widget.Toast.LENGTH_SHORT).show()
+                            load() 
+                        }
+                        .onFailure { onShowError(it.message ?: "Không thể gửi yêu cầu thuê phòng.") }
                 }
             }
         )
@@ -626,9 +668,9 @@ internal fun ModuleScreen(
     registeringService?.let { service ->
         RegisterServiceDialog(
             service = service,
+            rooms = rooms,
             onDismiss = { registeringService = null },
-            onSubmit = { note ->
-                actionError = null
+            onSubmit = { roomId, period, note ->
                 val regItem = RentalItem(
                     id = "",
                     title = "Đăng ký dịch vụ ${service.title}",
@@ -638,13 +680,18 @@ internal fun ModuleScreen(
                     details = listOf(
                         "serviceId" to service.id,
                         "tenantUsername" to (session?.username ?: ""),
-                        "roomId" to service.detail("roomId")
+                        "roomId" to roomId,
+                        "period" to period
                     )
                 )
                 scope.launch {
                     repository.saveItem(AppScreen.ServiceRegs, regItem, session)
-                        .onSuccess { registeringService = null; load() }
-                        .onFailure { actionError = it.message ?: "Không thể đăng ký dịch vụ." }
+                        .onSuccess { 
+                            registeringService = null
+                            android.widget.Toast.makeText(localCtx, "Đăng ký dịch vụ thành công!", android.widget.Toast.LENGTH_SHORT).show()
+                            load() 
+                        }
+                        .onFailure { onShowError(it.message ?: "Không thể đăng ký dịch vụ.") }
                 }
             }
         )
@@ -663,11 +710,10 @@ internal fun ModuleScreen(
             invoices = listOf(invoice),
             onDismiss = { paymentForInvoice = null },
             onSavePayment = { invId, txId, img, note ->
-                actionError = null
                 scope.launch {
                     repository.submitPayment(invId, txId, img, note, session)
                         .onSuccess { paymentForInvoice = null; load() }
-                        .onFailure { actionError = it.message ?: "Không thể gửi biên lai." }
+                        .onFailure { onShowError(it.message ?: "Không thể gửi biên lai.") }
                 }
             }
         )
@@ -677,11 +723,10 @@ internal fun ModuleScreen(
         RejectPaymentDialog(
             onDismiss = { rejectingPayment = null },
             onSubmit = { reason ->
-                actionError = null
                 scope.launch {
                     repository.decidePayment(payment.id, approve = false, rejectReason = reason, session = session)
                         .onSuccess { rejectingPayment = null; load() }
-                        .onFailure { actionError = it.message ?: "Không thể từ chối thanh toán." }
+                        .onFailure { onShowError(it.message ?: "Không thể từ chối thanh toán.") }
                 }
             }
         )
@@ -692,11 +737,10 @@ internal fun ModuleScreen(
             incident = incident,
             onDismiss = { respondingIncident = null },
             onSubmit = { response, newStatus ->
-                actionError = null
                 scope.launch {
                     repository.respondToIncident(incident.id, response, newStatus, session)
                         .onSuccess { respondingIncident = null; load() }
-                        .onFailure { actionError = it.message ?: "Không thể phản hồi sự cố." }
+                        .onFailure { onShowError(it.message ?: "Không thể phản hồi sự cố.") }
                 }
             }
         )
@@ -708,11 +752,10 @@ internal fun ModuleScreen(
             rooms = rooms,
             onDismiss = { noticeFormOpen = false },
             onSave = { title, content, targetType ->
-                actionError = null
                 scope.launch {
                     repository.createNotice(title, content, targetType, session)
                         .onSuccess { noticeFormOpen = false; load() }
-                        .onFailure { actionError = it.message ?: "Không thể tạo thông báo." }
+                        .onFailure { onShowError(it.message ?: "Không thể tạo thông báo.") }
                 }
             }
         )
@@ -723,7 +766,8 @@ internal fun ModuleScreen(
 internal fun AccountScreen(
     repository: RentalRepository,
     session: UserSession?,
-    onSessionExpired: () -> Unit
+    onSessionExpired: () -> Unit,
+    onShowError: (String) -> Unit
 ) {
     val scope = rememberCoroutineScope()
     val context = LocalContext.current
@@ -877,17 +921,17 @@ internal fun AccountScreen(
     if (changingPassword) {
         ChangePasswordDialog(
             saving = saving,
+            emailHint = draft.email.ifBlank { session?.username ?: "" },
             onDismiss = { changingPassword = false },
-            onSubmit = { oldPassword, newPassword, confirmPassword ->
-                val currentSession = session ?: return@ChangePasswordDialog
+            onSubmit = { email ->
                 saving = true
                 scope.launch {
-                    repository.changePassword(currentSession, oldPassword, newPassword, confirmPassword)
+                    repository.sendPasswordResetEmail(email)
                         .onSuccess {
                             message = it
                             changingPassword = false
                         }
-                        .onFailure { error = it.message ?: "Không thể đổi mật khẩu." }
+                        .onFailure { error = it.message ?: "Không thể gửi email khôi phục." }
                     saving = false
                 }
             }
@@ -951,14 +995,21 @@ internal fun ProfileEditor(
 
 @Composable
 internal fun getScreenStatuses(screen: AppScreen, items: List<RentalItem>): List<String> {
-    val existing = items.map { it.status }
+    val existing = items.map { 
+        when (it.status) {
+            "DangXuLy" -> "Đang xử lý"
+            "DaXuLy" -> "Đã khắc phục"
+            "KhongTheXuLy" -> "Không thể xử lý"
+            else -> it.status
+        }
+    }
     val predefined = when(screen) {
         AppScreen.Rooms -> listOf("Còn trống", "Đã thuê", "Đang sửa chữa")
         AppScreen.Contracts -> listOf("Chờ người thuê xác nhận", "Đang hiệu lực", "Đã thanh lý", "Hủy")
         AppScreen.Invoices -> listOf("Chưa thanh toán", "Đã thanh toán", "Một phần", "Hủy")
         AppScreen.Payments -> listOf("Chờ xác nhận", "Đã xác nhận", "Từ chối")
         AppScreen.RentRequests, AppScreen.RenewRequests -> listOf("Chờ duyệt", "Đã duyệt", "Từ chối")
-        AppScreen.Incidents -> listOf("Mới", "Đang xử lý", "Đã khắc phục")
+        AppScreen.Incidents -> listOf("Mới", "Đang xử lý", "Đã khắc phục", "Không thể xử lý")
         AppScreen.Notices -> listOf("Mới", "Đã xem")
         AppScreen.Users -> listOf("Đang hoạt động", "Bị khóa")
         else -> emptyList()
@@ -1050,6 +1101,7 @@ internal fun RentalListCard(
     screen: AppScreen,
     item: RentalItem,
     canManage: Boolean,
+    canEdit: Boolean = canManage,
     onOpen: () -> Unit,
     onEdit: () -> Unit,
     onDelete: () -> Unit
@@ -1062,6 +1114,7 @@ internal fun RentalListCard(
                 .clip(CutCornerShape(16.dp))
                 .background(AppCardBg)
                 .border(1.dp, accent.copy(alpha = 0.35f), CutCornerShape(16.dp))
+                .clickable { onOpen() }
                 .padding(14.dp),
             verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
@@ -1077,17 +1130,7 @@ internal fun RentalListCard(
             }
             Text(item.note, color = Color.White.copy(alpha = 0.8f), fontSize = 13.sp)
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
-                if (!canManage && item.status == "Mới") {
-                    Box(
-                        modifier = Modifier
-                            .weight(1f).height(36.dp)
-                            .clip(CutCornerShape(8.dp))
-                            .background(accent.copy(alpha = 0.25f))
-                            .border(1.dp, accent.copy(alpha = 0.5f), CutCornerShape(8.dp))
-                            .clickable { onOpen() },
-                        contentAlignment = Alignment.Center
-                    ) { Text("Đánh dấu đã đọc", color = accent, fontWeight = FontWeight.Bold, fontSize = 12.sp) }
-                }
+
                 if (canManage) {
                     Box(
                         modifier = Modifier
@@ -1140,7 +1183,7 @@ internal fun RentalListCard(
                 .padding(10.dp)
         ) {
             Column(verticalArrangement = Arrangement.spacedBy(3.dp)) {
-                val displayValue = if (screen in setOf(AppScreen.Rooms, AppScreen.Services, AppScreen.RoomTypes)) {
+                val displayValue = if (screen in setOf(AppScreen.Rooms, AppScreen.Services)) {
                     item.value.toLongOrNull()?.let { "${formatMoney(it)} VNĐ/tháng" } ?: item.value
                 } else if (screen in setOf(AppScreen.Contracts, AppScreen.Invoices, AppScreen.Payments, AppScreen.Electric, AppScreen.Water)) {
                     item.value.toLongOrNull()?.let { "${formatMoney(it)} VNĐ" } ?: item.value
@@ -1164,7 +1207,7 @@ internal fun RentalListCard(
                     .clickable { onOpen() },
                 contentAlignment = Alignment.Center
             ) { Text("Chi tiết", color = accent, fontWeight = FontWeight.Bold, fontSize = 12.sp) }
-            if (canManage) {
+            if (canEdit) {
                 Box(
                     modifier = Modifier
                         .weight(1f).height(40.dp)
@@ -1174,6 +1217,8 @@ internal fun RentalListCard(
                         .clickable { onEdit() },
                     contentAlignment = Alignment.Center
                 ) { Text("Sửa", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 12.sp) }
+            }
+            if (canManage) {
                 Box(
                     modifier = Modifier
                         .weight(1f).height(40.dp)

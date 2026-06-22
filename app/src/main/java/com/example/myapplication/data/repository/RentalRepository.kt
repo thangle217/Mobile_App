@@ -59,8 +59,8 @@ class RentalRepository(context: Context) : IRentalRepository {
         store.updateAccount(session, profile)
     }
 
-    override suspend fun changePassword(session: UserSession, oldPassword: String, newPassword: String, confirmPassword: String): Result<String> = runCatching {
-        store.changePassword(session, oldPassword, newPassword, confirmPassword)
+    override suspend fun sendPasswordResetEmail(email: String): Result<String> = runCatching {
+        store.sendPasswordResetEmail(email)
     }
 
     override suspend fun uploadCccdImage(fileName: String, mimeType: String, bytes: ByteArray, session: UserSession?): Result<String> = runCatching {
@@ -68,7 +68,7 @@ class RentalRepository(context: Context) : IRentalRepository {
     }
 
     override suspend fun dashboard(session: UserSession?): UiState<DashboardSummary> {
-        return UiState.Content(store.dashboard(), DataSource.Local)
+        return UiState.Content(store.dashboard(session), DataSource.Local)
     }
 
     override suspend fun list(screen: AppScreen, session: UserSession?): UiState<List<RentalItem>> {
@@ -78,7 +78,14 @@ class RentalRepository(context: Context) : IRentalRepository {
     }
 
     override suspend fun saveItem(screen: AppScreen, item: RentalItem, session: UserSession?): Result<RentalItem> = runCatching {
-        require(canManage(session?.role, screen)) { "Tài khoản này không có quyền sửa ${screen.label.lowercase()}." }
+        // NguoiDung can create new ServiceRegs (registrations)
+        val canSave = canManage(session?.role, screen) ||
+            (session?.role == UserRole.NguoiDung && screen == AppScreen.ServiceRegs && item.id.isBlank())
+        require(canSave) { "Tài khoản này không có quyền sửa ${screen.label.lowercase()}." }
+        // ChuTro cannot edit existing RentRequests (only view/delete/approve)
+        if (session?.role == UserRole.ChuTro && screen == AppScreen.RentRequests && item.id.isNotBlank()) {
+            error("Chủ trọ không được phép sửa yêu cầu thuê. Chỉ được xem, xóa, hoặc duyệt.")
+        }
         validateItemForScreen(screen, item)
         val id = item.id.ifBlank { store.nextId(screen) }
         val baseDetails = item.details.toMutableList()
@@ -89,6 +96,17 @@ class RentalRepository(context: Context) : IRentalRepository {
             baseDetails.add("createdBy" to session.username)
         }
         val finalItem = item.copy(details = baseDetails)
+        if (screen == AppScreen.Rooms && item.id.isBlank()) {
+            val houseId = finalItem.details.find { it.first == "houseId" }?.second ?: ""
+            val house = store.list(AppScreen.Houses, null).firstOrNull { it.id == houseId }
+            if (house != null) {
+                val maxRooms = house.value.filter { it.isDigit() }.toIntOrNull() ?: 0
+                if (maxRooms > 0) {
+                    val currentRooms = store.list(AppScreen.Rooms, null).count { it.details.any { d -> d.first == "houseId" && d.second == houseId } }
+                    require(currentRooms < maxRooms) { "Nhà trọ này đã đạt giới hạn tối đa $maxRooms phòng." }
+                }
+            }
+        }
         store.upsert(screen, finalItem.copy(id = id))
         finalItem.copy(id = id)
     }
@@ -97,9 +115,6 @@ class RentalRepository(context: Context) : IRentalRepository {
         when (screen) {
             AppScreen.Houses -> {
                 require(item.title.isNotBlank()) { "Tên nhà trọ không được để trống." }
-            }
-            AppScreen.RoomTypes -> {
-                require(item.title.isNotBlank()) { "Tên loại phòng không được để trống." }
             }
             AppScreen.Rooms -> {
                 require(item.title.isNotBlank()) { "Tên phòng không được để trống." }
@@ -127,9 +142,9 @@ class RentalRepository(context: Context) : IRentalRepository {
         store.delete(screen, id)
     }
 
-    override suspend fun requestRoom(roomId: String, session: UserSession?, duration: String, note: String): Result<RentalItem> = runCatching {
+    override suspend fun requestRoom(roomId: String, session: UserSession?, moveInDate: String, expectedMoveOutDate: String, note: String): Result<RentalItem> = runCatching {
         require(session?.role == UserRole.NguoiDung) { "Chỉ Người thuê được gửi yêu cầu thuê phòng." }
-        store.createRentRequest(roomId, session!!, duration, note)
+        store.createRentRequest(roomId, session!!, moveInDate, expectedMoveOutDate, note)
     }
 
     override suspend fun decideRentRequest(requestId: String, approve: Boolean, session: UserSession?): Result<RentalItem> = runCatching {
@@ -200,10 +215,11 @@ class RentalRepository(context: Context) : IRentalRepository {
         period: String,
         otherCost: Double,
         otherNote: String,
-        session: UserSession?
+        session: UserSession?,
+        roomRentOverride: Double?
     ): Result<RentalItem> = runCatching {
         require(session?.role == UserRole.Admin || session?.role == UserRole.ChuTro) { "Chỉ Admin hoặc Chủ trọ có quyền lập hóa đơn." }
-        store.createInvoice(roomId, period, otherCost, otherNote)
+        store.createInvoice(roomId, period, otherCost, otherNote, roomRentOverride)
     }
 
     override suspend fun submitPayment(
@@ -276,7 +292,6 @@ class RentalRepository(context: Context) : IRentalRepository {
         UserRole.Admin -> screen != AppScreen.Account
         UserRole.ChuTro -> screen in setOf(
             AppScreen.Houses,
-            AppScreen.RoomTypes,
             AppScreen.Rooms,
             AppScreen.Tenants,
             AppScreen.Contracts,

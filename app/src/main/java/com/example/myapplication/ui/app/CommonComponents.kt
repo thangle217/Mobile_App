@@ -316,8 +316,8 @@ internal fun screensForRole(role: UserRole): List<AppScreen> = when (role) {
         AppScreen.Notices, AppScreen.Account
     )
     UserRole.ChuTro -> listOf(
-        AppScreen.Dashboard, AppScreen.Houses, AppScreen.RoomTypes, AppScreen.Rooms,
-        AppScreen.Tenants, AppScreen.Contracts, AppScreen.Invoices, AppScreen.Payments,
+        AppScreen.Dashboard, AppScreen.Houses,  AppScreen.Rooms,
+        AppScreen.Contracts, AppScreen.Invoices, AppScreen.Payments,
         AppScreen.Services, AppScreen.Electric, AppScreen.Water,
         AppScreen.RentRequests, AppScreen.RenewRequests, AppScreen.Incidents,
         AppScreen.Notices, AppScreen.Account
@@ -332,7 +332,7 @@ internal fun bottomScreens(role: UserRole): List<AppScreen> = when (role) {
 internal fun canManageScreen(role: UserRole, screen: AppScreen): Boolean = when (role) {
     UserRole.Admin -> screen != AppScreen.Account
     UserRole.ChuTro -> screen in setOf(
-        AppScreen.Houses, AppScreen.RoomTypes, AppScreen.Rooms, AppScreen.Tenants,
+        AppScreen.Houses,  AppScreen.Rooms,
         AppScreen.Contracts, AppScreen.Invoices, AppScreen.Payments, AppScreen.Services,
         AppScreen.ServiceRegs, AppScreen.Electric, AppScreen.Water, AppScreen.RentRequests,
         AppScreen.RenewRequests, AppScreen.Incidents, AppScreen.Notices
@@ -386,7 +386,6 @@ internal fun statusColor(status: String, screen: AppScreen? = null): Color {
 internal fun screenAccent(screen: AppScreen): Color = when (screen) {
     AppScreen.Dashboard -> Color(0xFF34D399)
     AppScreen.Houses -> Color(0xFF0D9488)
-    AppScreen.RoomTypes -> Color(0xFF06B6D4)
     AppScreen.Rooms -> Color(0xFFEF4444)
     AppScreen.Tenants -> Color(0xFF10B981)
     AppScreen.Contracts -> Color(0xFF818CF8)
@@ -411,3 +410,4 @@ internal data class ConfirmData(
     val message: String,
     val onConfirm: () -> Unit
 )
+

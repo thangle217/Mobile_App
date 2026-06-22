@@ -314,7 +314,7 @@ class CloudDataSource {
         db.collection(getCollectionName(screen)).document(id).delete().await()
     }
 
-    suspend fun createRentRequest(roomId: String, session: UserSession, duration: String, note: String): RentalItem {
+    suspend fun createRentRequest(roomId: String, session: UserSession, moveInDate: String, expectedMoveOutDate: String, note: String): RentalItem {
         val exists = list(AppScreen.RentRequests, session).any {
             it.detail("roomId") == roomId &&
                 it.detail("tenantUsername").equals(session.username, true) &&
@@ -323,8 +323,8 @@ class CloudDataSource {
         require(!exists) { "Bạn đã có yêu cầu thuê phòng này đang chờ xử lý." }
 
         val docRef = db.collection("rentRequests").document()
-        val details = listOf("roomId" to roomId, "tenantUsername" to session.username, "duration" to duration)
-        val item = RentalItem(docRef.id, "Yêu cầu thuê phòng $roomId", "Chờ duyệt", duration, note, details)
+        val details = listOf("roomId" to roomId, "tenantUsername" to session.username, "moveInDate" to moveInDate, "expectedMoveOutDate" to expectedMoveOutDate)
+        val item = RentalItem(docRef.id, "Yêu cầu thuê phòng $roomId", "Chờ duyệt", moveInDate, note, details)
         upsert(AppScreen.RentRequests, item)
         return item
     }
@@ -450,7 +450,6 @@ class CloudDataSource {
     private fun getCollectionName(screen: AppScreen): String {
         return when (screen) {
             AppScreen.Houses -> "houses"
-            AppScreen.RoomTypes -> "roomTypes"
             AppScreen.Rooms -> "rooms"
             AppScreen.Tenants -> "tenants"
             AppScreen.Services -> "services"
@@ -468,3 +467,4 @@ class CloudDataSource {
 
 private fun RentalItem.detail(key: String): String = details.firstOrNull { it.first == key }?.second.orEmpty()
 private fun List<Pair<String, String>>.removeDetail(key: String) = filter { it.first != key }
+

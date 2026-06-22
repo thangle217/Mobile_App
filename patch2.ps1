@@ -3,79 +3,73 @@ $lines = Get-Content $appFile -Encoding UTF8
 $out = @()
 $skipActionError = $false
 foreach ($line in $lines) {
-    if ($line -match "else -> ModuleScreen\(repository, session, screen, onLogout\)") {
+    if ($line -match "AppScreen.RoomTypes -> Color") { continue }
+    
+    if ($line -match 'else -> ModuleScreen\(repository, session, screen, onLogout\)') {
         $out += $line.Replace("else -> ModuleScreen(repository, session, screen, onLogout)", "else -> ModuleScreen(repository, session, screen, onLogout, { msg -> globalError = msg; errorKey++ })")
         continue
     }
     
-    # MainShell box padding replacement
-    if ($line -match "Box\(modifier = Modifier\.padding\(padding\)\) \{") {
+    if ($line -match 'Box\(modifier = Modifier\.padding\(padding\)\) \{') {
         $line = $line.Replace("Box(modifier = Modifier.padding(padding)) {", "Box(modifier = Modifier.padding(padding).fillMaxSize()) {")
     }
-    
-    # Inject AnimatedVisibility at the end of MainShell Box
-    if ($line -match "\} // END MAIN SHELL") { # wait, I can just inject it after the when
-    }
 
-    if ($line -match "onSessionExpired: \(\) -> Unit") {
-        if ($line -notmatch "onShowError") {
+    if ($line -match 'onSessionExpired: \(\) -> Unit') {
+        if ($line -notmatch 'onShowError') {
             $out += "    onSessionExpired: () -> Unit,"
             $out += "    onShowError: (String) -> Unit"
             continue
         }
     }
-    if ($line -match "var actionError by remember \{ mutableStateOf<String\?>\(null\) \}") { continue }
-    if ($line -match "actionError\?\.let \{") {
+    if ($line -match 'var actionError by remember \{ mutableStateOf<String\?>\(null\) \}') { continue }
+    if ($line -match 'actionError\?\.let \{') {
         $skipActionError = $true
         continue
     }
     if ($skipActionError) {
-        if ($line -match "\}" -and $line -notmatch "item \{") { $skipActionError = $false }
+        if ($line -match '\}' -and $line -notmatch 'item \{') { $skipActionError = $false }
         continue
     }
-    if ($line -match "actionError = null") { continue }
-    if ($line -match "\.onFailure \{ actionError = (.*?\.message.*?) \}") {
-        $line = $line -replace "\.onFailure \{ actionError = (.*?) \}", ".onFailure { onShowError($1) }"
+    if ($line -match 'actionError = null') { continue }
+    if ($line -match '\.onFailure \{ actionError = (.*?\.message.*?) \}') {
+        $line = $line -replace '\.onFailure \{ actionError = (.*?) \}', '.onFailure { onShowError($1) }'
     }
     
-    # RentRequestDialog fix
-    if ($line -match "onSubmit = \{ duration, note ->") {
+    if ($line -match 'onSubmit = \{ duration, note ->') {
         $line = $line.Replace("duration, note", "moveInDate, expectedMoveOutDate, note")
     }
-    if ($line -match "repository.requestRoom\(room.id, session, duration, note\)") {
+    if ($line -match 'repository.requestRoom\(room.id, session, duration, note\)') {
         $line = $line.Replace("duration", "moveInDate, expectedMoveOutDate")
     }
     
-    # RegisterServiceDialog fix
-    if ($line -match "service = service,") {
-        if ($out[-1] -match "RegisterServiceDialog\(") {
+    if ($line -match 'service = service,') {
+        if ($out[-1] -match 'RegisterServiceDialog\(') {
             $out += $line
             $out += "            rooms = rooms,"
             continue
         }
     }
-    if ($line -match "onSubmit = \{ note ->") {
-        $line = $line.Replace("note ->", "roomId, period, note ->")
+    if ($line -match 'onSubmit = \{ note ->') {
+        if ($out[-1] -match 'onDismiss = \{ registeringService = null \},') {
+            $line = $line.Replace("note ->", "roomId, period, note ->")
+        }
     }
-    if ($line -match ""roomId" to service.detail\("roomId"\)") {
-        $line = $line.Replace(""roomId" to service.detail("roomId")", ""roomId" to roomId,
-                        "period" to period")
+    if ($line -match '"roomId" to service.detail\("roomId"\)') {
+        $line = $line.Replace('"roomId" to service.detail("roomId")', '"roomId" to roomId, period')
     }
     
-    # RoomTypes cleanup
-    if ($line -match "AppScreen.RoomTypes ->") { continue }
-    if ($line -match "AppScreen.RoomTypes,") { $line = $line.Replace("AppScreen.RoomTypes,", "") }
-    if ($line -match ", AppScreen.RoomTypes") { $line = $line.Replace(", AppScreen.RoomTypes", "") }
+    if ($line -match 'AppScreen.RoomTypes ->') { continue }
+    if ($line -match 'AppScreen.RoomTypes,') { $line = $line.Replace("AppScreen.RoomTypes,", "") }
+    if ($line -match ', AppScreen.RoomTypes') { $line = $line.Replace(", AppScreen.RoomTypes", "") }
     
     $out += $line
 }
 
-# Now for MainShell state injection
 $finalOut = @()
+$skipNextBrace = $false
 foreach ($line in $out) {
     $finalOut += $line
-    if ($line -match "val scope = rememberCoroutineScope\(\)") {
-        # Check if we are inside MainShell (line number < 100 approx)
+    if ($line -match 'val scope = rememberCoroutineScope\(\)') {
         if ($finalOut.Length -lt 150) {
             $finalOut += "    var globalError by remember { mutableStateOf<String?>(null) }"
             $finalOut += "    var errorKey by remember { mutableStateOf(0) }"
@@ -87,7 +81,7 @@ foreach ($line in $out) {
             $finalOut += "    }"
         }
     }
-    if ($line -match "else -> ModuleScreen\(repository, session, screen, onLogout") {
+    if ($line -match 'else -> ModuleScreen\(repository, session, screen, onLogout') {
         $finalOut += "                }"
         $finalOut += "                androidx.compose.animation.AnimatedVisibility("
         $finalOut += "                    visible = globalError != null,"
@@ -98,15 +92,14 @@ foreach ($line in $out) {
         $finalOut += "                    Box("
         $finalOut += "                        modifier = Modifier.clip(CutCornerShape(8.dp)).background(Color(0xFFB91C1C)).border(1.dp, Color(0xFFFCA5A5), CutCornerShape(8.dp)).padding(horizontal = 16.dp, vertical = 10.dp)"
         $finalOut += "                    ) {"
-        $finalOut += "                        Text(text = globalError ?: "", color = Color.White, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Bold)"
+        $finalOut += "                        Text(text = globalError ?: `"`", color = Color.White, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Bold)"
         $finalOut += "                    }"
         $finalOut += "                }"
         $skipNextBrace = $true
     }
-    if ($skipNextBrace -and $line -match "^\s*\}\s*$") {
+    if ($skipNextBrace -and $line -match '^\s*\}\s*$') {
         $skipNextBrace = $false
-        $finalOut = $finalOut[0..($finalOut.Length-2)] # remove the brace we just added (actually we skip adding it)
-        # Wait, if I skip adding it, the loop already added it. I will just pop it.
+        $finalOut = $finalOut[0..($finalOut.Length-2)]
     }
 }
 

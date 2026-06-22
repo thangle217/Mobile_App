@@ -1,0 +1,211 @@
+internal fun RegisterServiceDialog(
+    service: RentalItem,
+    rooms: List<RentalItem>,
+    onDismiss: () -> Unit,
+    onSubmit: (roomId: String, period: String, note: String) -> Unit
+) {
+    // Determine if service is scoped to a specific room
+    val serviceScope = service.detail("scope")
+    val isScopedToRoom = serviceScope.startsWith("room:")
+    val scopedRoomId = if (isScopedToRoom) serviceScope.removePrefix("room:") else ""
+
+    var selectedRoomId by remember(service) {
+        mutableStateOf(if (isScopedToRoom) scopedRoomId else rooms.firstOrNull()?.id ?: "")
+    }
+    var period by remember(service) { mutableStateOf("") }
+    var note by remember(service) { mutableStateOf("Tôi muốn đăng ký dịch vụ này.") }
+    var error by remember { mutableStateOf<String?>(null) }
+    val fieldColors = defaultFieldColors()
+
+    val context = androidx.compose.ui.platform.LocalContext.current
+    val calendar = java.util.Calendar.getInstance()
+    val monthPickerDialog = android.app.DatePickerDialog(
+        context,
+        { _, year, month, _ -> period = String.format("%04d-%02d", year, month + 1) },
+        calendar.get(java.util.Calendar.YEAR), calendar.get(java.util.Calendar.MONTH), calendar.get(java.util.Calendar.DAY_OF_MONTH)
+    )
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Đăng ký dịch vụ", fontWeight = FontWeight.Bold, color = Color.White) },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                DetailRow("Dịch vụ", service.title)
+                DetailRow("Giá", service.value)
+                DetailRow("Loại", service.status)
+                // Only show room picker when service is house-wide
+                if (!isScopedToRoom && rooms.isNotEmpty()) {
+                    var expanded by remember { mutableStateOf(false) }
+                    val selectedRoom = rooms.find { it.id == selectedRoomId }
+                    Box {
+                        OutlinedTextField(
+                            value = selectedRoom?.title ?: "Chọn phòng của bạn",
+                            onValueChange = {},
+                            readOnly = true,
+                            label = { Text("Phòng *") },
+                            modifier = Modifier.fillMaxWidth().clickable { expanded = true },
+                            shape = CutCornerShape(8.dp),
+                            colors = fieldColors,
+                            enabled = false,
+                            trailingIcon = { Icon(Icons.Default.ArrowDropDown, null, tint = Color.White) }
+                        )
+                        Box(modifier = Modifier.matchParentSize().clickable { expanded = true })
+                        DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
+                            rooms.forEach { room ->
+                                DropdownMenuItem(
+                                    text = { Text(room.title) },
+                                    onClick = { selectedRoomId = room.id; expanded = false }
+                                )
+                            }
+                        }
+                    }
+                } else if (isScopedToRoom) {
+                    // Show fixed room (service is for specific room only)
+                    val roomName = rooms.find { it.id == scopedRoomId }?.title ?: scopedRoomId
+                    DetailRow("Phòng áp dụng", roomName)
+                }
+                Box {
+                    OutlinedTextField(
+                        value = period,
+                        onValueChange = {},
+                        readOnly = true,
+                        label = { Text("Tháng áp dụng (YYYY-MM) *") },
+                        modifier = Modifier.fillMaxWidth().clickable { monthPickerDialog.show() },
+                        shape = CutCornerShape(8.dp),
+                        colors = fieldColors,
+                        enabled = false
+                    )
+                    Box(modifier = Modifier.matchParentSize().clickable { monthPickerDialog.show() })
+                }
+                OutlinedTextField(
+                    value = note,
+                    onValueChange = { note = it },
+                    label = { Text("Ghi chú") },
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = CutCornerShape(8.dp),
+                    colors = fieldColors
+                )
+                error?.let { Text(it, color = Color(0xFFFCA5A5), style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.Medium) }
+            }
+        },
+        confirmButton = {
+            Box(
+                modifier = Modifier
+                    .clip(CutCornerShape(8.dp))
+                    .background(Color(0xFF34D399))
+                    .clickable {
+                        when {
+                            !isScopedToRoom && selectedRoomId.isBlank() -> error = "Vui lòng chọn phòng."
+                            period.isBlank() -> error = "Vui lòng chọn tháng áp dụng."
+                            else -> {
+                                onSubmit(selectedRoomId, period, note.trim())
+                                android.widget.Toast.makeText(context, "Đăng ký dịch vụ thành công", android.widget.Toast.LENGTH_SHORT).show()
+                            }
+                        }
+                    }
+                    .padding(horizontal = 20.dp, vertical = 10.dp)
+            ) { Text("Gửi đăng ký", color = Color.White, fontWeight = FontWeight.Bold) }
+        },
+        dismissButton = { TextButton(onClick = onDismiss) { Text("Hủy", color = Color(0xFF34D399)) } },
+        containerColor = Color(0xFF064E3B),
+        titleContentColor = Color.White,
+        shape = CutCornerShape(20.dp)
+    )
+}
+
+@Composable
+internal fun RentRequestDialog(room: RentalItem, onDismiss: () -> Unit, onSubmit: (moveInDate: String, expectedMoveOutDate: String, note: String) -> Unit) {
+    var moveInDate by remember(room) { mutableStateOf("") }
+    var moveOutDate by remember(room) { mutableStateOf("") }
+    var note by remember(room) { mutableStateOf("Mình muốn thuê phòng này.") }
+    var error by remember { mutableStateOf<String?>(null) }
+    
+    val context = androidx.compose.ui.platform.LocalContext.current
+    val calendar = java.util.Calendar.getInstance()
+
+    // Helper: parse dd/MM/yyyy -> Calendar
+    fun parseDate(s: String): java.util.Calendar? = try {
+        val sdf = java.text.SimpleDateFormat("dd/MM/yyyy", java.util.Locale.getDefault())
+        java.util.Calendar.getInstance().also { it.time = sdf.parse(s)!! }
+    } catch (e: Exception) { null }
+
+    val moveInPicker = android.app.DatePickerDialog(
+        context,
+        { _, year, month, dayOfMonth -> moveInDate = String.format("%02d/%02d/%04d", dayOfMonth, month + 1, year) },
+        calendar.get(java.util.Calendar.YEAR), calendar.get(java.util.Calendar.MONTH), calendar.get(java.util.Calendar.DAY_OF_MONTH)
+    )
+    val moveOutPicker = android.app.DatePickerDialog(
+        context,
+        { _, year, month, dayOfMonth -> moveOutDate = String.format("%02d/%02d/%04d", dayOfMonth, month + 1, year) },
+        calendar.get(java.util.Calendar.YEAR), calendar.get(java.util.Calendar.MONTH), calendar.get(java.util.Calendar.DAY_OF_MONTH)
+    )
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        shape = RoundedCornerShape(16.dp),
+        title = { Text("Gửi yêu cầu thuê phòng", fontWeight = FontWeight.Bold, color = Color(0xFF1E293B)) },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                DetailRow("Phòng cần thuê", room.title)
+                val priceDisplay = room.value.toLongOrNull()?.let { "%,d VNĐ/tháng".format(it).replace(',', '.') } ?: room.value
+                DetailRow("Giá thuê", priceDisplay)
+                Box {
+                    OutlinedTextField(
+                        value = moveInDate, onValueChange = {}, readOnly = true,
+                        label = { Text("Ngày chuyển vào *") },
+                        modifier = Modifier.fillMaxWidth().clickable { moveInPicker.show() }, singleLine = true,
+                        shape = RoundedCornerShape(8.dp), enabled = false
+                    )
+                    Box(modifier = Modifier.matchParentSize().clickable { moveInPicker.show() })
+                }
+                Box {
+                    OutlinedTextField(
+                        value = moveOutDate, onValueChange = {}, readOnly = true,
+                        label = { Text("Ngày dự kiến chuyển đi *") },
+                        modifier = Modifier.fillMaxWidth().clickable { moveOutPicker.show() }, singleLine = true,
+                        shape = RoundedCornerShape(8.dp), enabled = false
+                    )
+                    Box(modifier = Modifier.matchParentSize().clickable { moveOutPicker.show() })
+                }
+                OutlinedTextField(
+                    value = note, onValueChange = { note = it },
+                    label = { Text("Ghi chú thêm") },
+                    modifier = Modifier.fillMaxWidth(), minLines = 2,
+                    shape = RoundedCornerShape(8.dp)
+                )
+                error?.let { Text(it, color = Color(0xFFEF4444), style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.Medium) }
+            }
+        },
+        confirmButton = {
+            Button(
+                onClick = {
+                    when {
+                        moveInDate.isBlank() -> error = "Vui lòng chọn ngày chuyển vào."
+                        moveOutDate.isBlank() -> error = "Vui lòng chọn ngày dự kiến chuyển đi."
+                        else -> {
+                            val inCal = parseDate(moveInDate)
+                            val outCal = parseDate(moveOutDate)
+                            if (inCal != null && outCal != null) {
+                                val diffMs = outCal.timeInMillis - inCal.timeInMillis
+                                val diffDays = diffMs / (1000 * 60 * 60 * 24)
+                                if (diffDays < 1) {
+                                    error = "Ngày chuyển đi phải sau ngày chuyển vào ít nhất 1 ngày."
+                                } else {
+                                    onSubmit(moveInDate, moveOutDate, note)
+                                }
+                            } else {
+                                error = "Ngày không hợp lệ. Vui lòng chọn lại."
+                            }
+                        }
+                    }
+                },
+                shape = RoundedCornerShape(8.dp),
+                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF0F766E))
+            ) {
+                Text("Gửi yêu cầu", fontWeight = FontWeight.Bold)
+            }
+        },
+        dismissButton = { TextButton(onClick = onDismiss) { Text("Hủy") } }
+    )
+}
+

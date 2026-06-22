@@ -13,7 +13,6 @@ enum class UserRole(val label: String) {
 enum class AppScreen(val label: String, val shortCode: String) {
     Dashboard("Tổng quan", "DB"),
     Houses("Nhà trọ", "NT"),
-    RoomTypes("Loại phòng", "LP"),
     Rooms("Phòng", "P"),
     Tenants("Khách thuê", "KT"),
     Contracts("Hợp đồng", "HD"),
@@ -43,8 +42,13 @@ data class RentalItem(
 data class DashboardSummary(
     val totalRooms: Int = 0,
     val emptyRooms: Int = 0,
+    val rentedRooms: Int = 0,
     val unpaidInvoices: Int = 0,
+    val paidInvoices: Int = 0,
     val pendingTasks: Int = 0,
+    val unreadNotices: Int = 0,
+    val unresolvedIncidents: Int = 0,
+    val pendingRentRequests: Int = 0,
     val revenue: Long = 0L
 )
 
