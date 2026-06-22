@@ -20,6 +20,8 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -31,6 +33,53 @@ import com.example.myapplication.data.repository.RentalRepository
 import com.example.myapplication.domain.model.AppScreen
 import com.example.myapplication.domain.model.RentalItem
 import com.example.myapplication.domain.util.moneyValue
+
+class CurrencyVisualTransformation(val suffix: String = "") : androidx.compose.ui.text.input.VisualTransformation {
+    override fun filter(text: androidx.compose.ui.text.AnnotatedString): androidx.compose.ui.text.input.TransformedText {
+        val original = text.text.filter { it.isDigit() }
+        if (original.isEmpty()) return androidx.compose.ui.text.input.TransformedText(text, androidx.compose.ui.text.input.OffsetMapping.Identity)
+        
+        val formatted = try {
+            val number = original.toLong()
+            java.text.NumberFormat.getNumberInstance(java.util.Locale("vi", "VN")).format(number) + suffix
+        } catch (e: Exception) {
+            original + suffix
+        }
+        
+        return androidx.compose.ui.text.input.TransformedText(
+            androidx.compose.ui.text.AnnotatedString(formatted),
+            object : androidx.compose.ui.text.input.OffsetMapping {
+                override fun originalToTransformed(offset: Int): Int {
+                    var transformedOffset = 0
+                    var originalCharsCount = 0
+                    for (i in formatted.indices) {
+                        if (originalCharsCount == offset) break
+                        if (formatted[i].isDigit()) originalCharsCount++
+                        transformedOffset++
+                    }
+                    return transformedOffset
+                }
+                override fun transformedToOriginal(offset: Int): Int {
+                    var originalOffset = 0
+                    for (i in 0 until offset) {
+                        if (formatted.getOrNull(i)?.isDigit() == true) originalOffset++
+                    }
+                    return minOf(originalOffset, original.length)
+                }
+            }
+        )
+    }
+}
+
+@Composable
+internal fun defaultFieldColors() = OutlinedTextFieldDefaults.colors(
+    focusedTextColor = Color.White, unfocusedTextColor = Color.White,
+    disabledTextColor = Color.White,
+    focusedBorderColor = Color(0xFF34D399), unfocusedBorderColor = Color.White.copy(alpha = 0.3f),
+    disabledBorderColor = Color.White.copy(alpha = 0.3f),
+    cursorColor = Color(0xFF34D399), focusedLabelColor = Color(0xFF34D399), unfocusedLabelColor = Color.White.copy(alpha = 0.55f),
+    disabledLabelColor = Color.White.copy(alpha = 0.55f)
+)
 
 @Composable
 internal fun SpecializedEditDialog(
@@ -258,7 +307,7 @@ internal fun ContractEditorDialog(
                         }
                     }
                 }
-                item { OutlinedTextField(value = deposit, onValueChange = { deposit = it }, label = { Text("Tiền đặt cọc") }, modifier = Modifier.fillMaxWidth(), singleLine = true, shape = CutCornerShape(8.dp), colors = fieldColors) }
+                item { OutlinedTextField(value = deposit, onValueChange = { deposit = it.filter { char -> char.isDigit() } }, label = { Text("Tiền đặt cọc") }, modifier = Modifier.fillMaxWidth(), singleLine = true, shape = CutCornerShape(8.dp), colors = fieldColors, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number), visualTransformation = CurrencyVisualTransformation()) }
                 item { 
                     Box {
                         OutlinedTextField(
@@ -315,11 +364,7 @@ internal fun RenewRequestDialog(contract: RentalItem, onDismiss: () -> Unit, onS
         calendar.get(java.util.Calendar.YEAR), calendar.get(java.util.Calendar.MONTH), calendar.get(java.util.Calendar.DAY_OF_MONTH)
     )
 
-    val fieldColors = OutlinedTextFieldDefaults.colors(
-        focusedTextColor = Color.White, unfocusedTextColor = Color.White,
-        focusedBorderColor = Color(0xFF34D399), unfocusedBorderColor = Color.White.copy(alpha = 0.3f),
-        cursorColor = Color(0xFF34D399), focusedLabelColor = Color(0xFF34D399), unfocusedLabelColor = Color.White.copy(alpha = 0.55f)
-    )
+    val fieldColors = defaultFieldColors()
 
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -356,6 +401,44 @@ internal fun RenewRequestDialog(contract: RentalItem, onDismiss: () -> Unit, onS
                     }
                     .padding(horizontal = 20.dp, vertical = 10.dp)
             ) { Text("Gửi gia hạn", color = Color.White, fontWeight = FontWeight.Bold) }
+        },
+        dismissButton = { TextButton(onClick = onDismiss) { Text("Hủy", color = Color(0xFF34D399)) } },
+        containerColor = Color(0xFF064E3B),
+        titleContentColor = Color.White,
+        shape = CutCornerShape(20.dp)
+    )
+}
+
+@Composable
+internal fun RegisterServiceDialog(service: RentalItem, onDismiss: () -> Unit, onSubmit: (String) -> Unit) {
+    var note by remember(service) { mutableStateOf("Tôi muốn đăng ký dịch vụ này.") }
+    val fieldColors = defaultFieldColors()
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Đăng ký dịch vụ", fontWeight = FontWeight.Bold, color = Color.White) },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                DetailRow("Dịch vụ", service.title)
+                DetailRow("Giá", service.value)
+                OutlinedTextField(
+                    value = note,
+                    onValueChange = { note = it },
+                    label = { Text("Ghi chú") },
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = CutCornerShape(8.dp),
+                    colors = fieldColors
+                )
+            }
+        },
+        confirmButton = {
+            Box(
+                modifier = Modifier
+                    .clip(CutCornerShape(8.dp))
+                    .background(Color(0xFF34D399))
+                    .clickable { onSubmit(note.trim()) }
+                    .padding(horizontal = 20.dp, vertical = 10.dp)
+            ) { Text("Gửi đăng ký", color = Color.White, fontWeight = FontWeight.Bold) }
         },
         dismissButton = { TextButton(onClick = onDismiss) { Text("Hủy", color = Color(0xFF34D399)) } },
         containerColor = Color(0xFF064E3B),
@@ -423,11 +506,7 @@ internal fun HouseFormDialog(item: RentalItem, onDismiss: () -> Unit, onSave: (R
     var status by remember(item) { mutableStateOf(item.status.ifBlank { "Đang hoạt động" }) }
     var error by remember { mutableStateOf<String?>(null) }
 
-    val fieldColors = OutlinedTextFieldDefaults.colors(
-        focusedTextColor = Color.White, unfocusedTextColor = Color.White,
-        focusedBorderColor = Color(0xFF34D399), unfocusedBorderColor = Color.White.copy(alpha = 0.3f),
-        cursorColor = Color(0xFF34D399), focusedLabelColor = Color(0xFF34D399), unfocusedLabelColor = Color.White.copy(alpha = 0.55f)
-    )
+    val fieldColors = defaultFieldColors()
 
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -482,11 +561,7 @@ internal fun RoomTypeFormDialog(item: RentalItem, houses: List<RentalItem>, onDi
     var error by remember { mutableStateOf<String?>(null) }
     var houseExpanded by remember { mutableStateOf(false) }
 
-    val fieldColors = OutlinedTextFieldDefaults.colors(
-        focusedTextColor = Color.White, unfocusedTextColor = Color.White,
-        focusedBorderColor = Color(0xFF34D399), unfocusedBorderColor = Color.White.copy(alpha = 0.3f),
-        cursorColor = Color(0xFF34D399), focusedLabelColor = Color(0xFF34D399), unfocusedLabelColor = Color.White.copy(alpha = 0.55f)
-    )
+    val fieldColors = defaultFieldColors()
 
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -566,11 +641,7 @@ internal fun RoomFormDialog(
     var error by remember { mutableStateOf<String?>(null) }
     var houseExpanded by remember { mutableStateOf(false) }
 
-    val fieldColors = OutlinedTextFieldDefaults.colors(
-        focusedTextColor = Color.White, unfocusedTextColor = Color.White,
-        focusedBorderColor = Color(0xFF34D399), unfocusedBorderColor = Color.White.copy(alpha = 0.3f),
-        cursorColor = Color(0xFF34D399), focusedLabelColor = Color(0xFF34D399), unfocusedLabelColor = Color.White.copy(alpha = 0.55f)
-    )
+    val fieldColors = defaultFieldColors()
 
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -597,7 +668,7 @@ internal fun RoomFormDialog(
                         }
                     }
                 }
-                item { OutlinedTextField(value = price, onValueChange = { price = it }, label = { Text("Giá thuê phòng * (VNĐ)") }, modifier = Modifier.fillMaxWidth(), singleLine = true, shape = CutCornerShape(8.dp), colors = fieldColors) }
+                item { OutlinedTextField(value = price, onValueChange = { price = it.filter { char -> char.isDigit() } }, label = { Text("Giá thuê phòng * (VNĐ/tháng)") }, modifier = Modifier.fillMaxWidth(), singleLine = true, shape = CutCornerShape(8.dp), colors = fieldColors, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number), visualTransformation = CurrencyVisualTransformation(" VNĐ/tháng")) }
                 item { OutlinedTextField(value = area, onValueChange = { area = it }, label = { Text("Diện tích (m2)") }, modifier = Modifier.fillMaxWidth(), singleLine = true, shape = CutCornerShape(8.dp), colors = fieldColors) }
                 item { OutlinedTextField(value = capacity, onValueChange = { capacity = it }, label = { Text("Sức chứa (người)") }, modifier = Modifier.fillMaxWidth(), singleLine = true, shape = CutCornerShape(8.dp), colors = fieldColors) }
                 item {
@@ -667,11 +738,7 @@ internal fun ServiceFormDialog(item: RentalItem, houses: List<RentalItem>, rooms
 
     val filteredRooms = remember(selectedHouseId, rooms) { rooms.filter { it.detail("houseId") == selectedHouseId } }
 
-    val fieldColors = OutlinedTextFieldDefaults.colors(
-        focusedTextColor = Color.White, unfocusedTextColor = Color.White,
-        focusedBorderColor = Color(0xFF34D399), unfocusedBorderColor = Color.White.copy(alpha = 0.3f),
-        cursorColor = Color(0xFF34D399), focusedLabelColor = Color(0xFF34D399), unfocusedLabelColor = Color.White.copy(alpha = 0.55f)
-    )
+    val fieldColors = defaultFieldColors()
 
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -681,7 +748,7 @@ internal fun ServiceFormDialog(item: RentalItem, houses: List<RentalItem>, rooms
                 Box {
                     OutlinedTextField(
                         value = houses.find { it.id == selectedHouseId }?.let { "${it.id} - ${it.title}" } ?: "Chọn nhà trọ...",
-                        onValueChange = {}, readOnly = true,
+                        onValueChange = {}, readOnly = true, enabled = false,
                         label = { Text("Nhà trọ *") },
                         modifier = Modifier.fillMaxWidth(),
                         shape = CutCornerShape(8.dp), colors = fieldColors
@@ -699,7 +766,7 @@ internal fun ServiceFormDialog(item: RentalItem, houses: List<RentalItem>, rooms
                 Box {
                     OutlinedTextField(
                         value = filteredRooms.find { it.id == selectedRoomId }?.let { "${it.id} - ${it.title}" } ?: "Chọn phòng trọ...",
-                        onValueChange = {}, readOnly = true,
+                        onValueChange = {}, readOnly = true, enabled = false,
                         label = { Text("Phòng trọ *") },
                         modifier = Modifier.fillMaxWidth(),
                         shape = CutCornerShape(8.dp), colors = fieldColors
@@ -717,7 +784,7 @@ internal fun ServiceFormDialog(item: RentalItem, houses: List<RentalItem>, rooms
                 Box {
                     OutlinedTextField(
                         value = status,
-                        onValueChange = {}, readOnly = true,
+                        onValueChange = {}, readOnly = true, enabled = false,
                         label = { Text("Loại dịch vụ *") },
                         modifier = Modifier.fillMaxWidth(),
                         shape = CutCornerShape(8.dp), colors = fieldColors
@@ -733,7 +800,7 @@ internal fun ServiceFormDialog(item: RentalItem, houses: List<RentalItem>, rooms
                     }
                 }
                 OutlinedTextField(value = name, onValueChange = { name = it }, label = { Text("Tên dịch vụ * (VD: Internet, Rác...)") }, modifier = Modifier.fillMaxWidth(), singleLine = true, shape = CutCornerShape(8.dp), colors = fieldColors)
-                OutlinedTextField(value = price, onValueChange = { price = it }, label = { Text("Đơn giá (VNĐ/tháng) *") }, modifier = Modifier.fillMaxWidth(), singleLine = true, shape = CutCornerShape(8.dp), colors = fieldColors)
+                OutlinedTextField(value = price, onValueChange = { price = it.filter { char -> char.isDigit() } }, label = { Text("Đơn giá (VNĐ/tháng) *") }, modifier = Modifier.fillMaxWidth(), singleLine = true, shape = CutCornerShape(8.dp), colors = fieldColors, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number), visualTransformation = CurrencyVisualTransformation())
                 OutlinedTextField(value = note, onValueChange = { note = it }, label = { Text("Ghi chú") }, modifier = Modifier.fillMaxWidth(), minLines = 2, shape = CutCornerShape(8.dp), colors = fieldColors)
                 error?.let { Text(it, color = Color(0xFFFCA5A5), style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.Medium) }
             }
@@ -799,11 +866,7 @@ internal fun UtilityReadingFormDialog(
         }
     }
 
-    val fieldColors = OutlinedTextFieldDefaults.colors(
-        focusedTextColor = Color.White, unfocusedTextColor = Color.White,
-        focusedBorderColor = Color(0xFF34D399), unfocusedBorderColor = Color.White.copy(alpha = 0.3f),
-        cursorColor = Color(0xFF34D399), focusedLabelColor = Color(0xFF34D399), unfocusedLabelColor = Color.White.copy(alpha = 0.55f)
-    )
+    val fieldColors = defaultFieldColors()
 
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -848,14 +911,25 @@ internal fun UtilityReadingFormDialog(
                         }
                     }
                 }
-                item { OutlinedTextField(value = period, onValueChange = { period = it }, label = { Text("Kỳ ghi chỉ số * (VD: 2026-06)") }, modifier = Modifier.fillMaxWidth(), singleLine = true, shape = CutCornerShape(8.dp), colors = fieldColors) }
+                item {
+                    val context = LocalContext.current
+                    OutlinedTextField(
+                        value = period, onValueChange = {}, readOnly = true, enabled = false,
+                        label = { Text("Kỳ ghi chỉ số * (VD: 2026-06)") }, modifier = Modifier.fillMaxWidth().clickable {
+                            val cal = java.util.Calendar.getInstance()
+                            android.app.DatePickerDialog(context, { _, year, month, _ ->
+                                period = "$year-${(month + 1).toString().padStart(2, '0')}"
+                            }, cal.get(java.util.Calendar.YEAR), cal.get(java.util.Calendar.MONTH), cal.get(java.util.Calendar.DAY_OF_MONTH)).show()
+                        }, singleLine = true, shape = CutCornerShape(8.dp), colors = fieldColors
+                    )
+                }
                 item {
                     Row(horizontalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.fillMaxWidth()) {
                         OutlinedTextField(value = if (loadingOldIndex) "Đang tải..." else oldIndex.toString(), onValueChange = {}, label = { Text("Chỉ số cũ") }, enabled = false, modifier = Modifier.weight(1f), shape = CutCornerShape(8.dp), colors = fieldColors)
                         OutlinedTextField(value = newIndexStr, onValueChange = { newIndexStr = it }, label = { Text("Chỉ số mới *") }, modifier = Modifier.weight(1f), singleLine = true, shape = CutCornerShape(8.dp), colors = fieldColors)
                     }
                 }
-                item { OutlinedTextField(value = priceStr, onValueChange = { priceStr = it }, label = { Text("Đơn giá (${if (screen == AppScreen.Electric) "đ/kWh" else "đ/m3"})") }, modifier = Modifier.fillMaxWidth(), singleLine = true, shape = CutCornerShape(8.dp), colors = fieldColors) }
+                item { OutlinedTextField(value = priceStr, onValueChange = { priceStr = it.filter { char -> char.isDigit() } }, label = { Text("Đơn giá (${if (screen == AppScreen.Electric) "đ/kWh" else "đ/m3"})") }, modifier = Modifier.fillMaxWidth(), singleLine = true, shape = CutCornerShape(8.dp), colors = fieldColors, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number), visualTransformation = CurrencyVisualTransformation()) }
                 error?.let { err -> item { Text(err, color = Color(0xFFFCA5A5), style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.Medium) } }
             }
         },
@@ -961,19 +1035,24 @@ internal fun InvoiceFormDialog(
                     }
                 }
                 item {
+                    val context = LocalContext.current
                     OutlinedTextField(
-                        value = period, onValueChange = { period = it },
+                        value = period, onValueChange = {}, readOnly = true, enabled = false,
                         label = { Text("Kỳ hóa đơn * (VD: 2026-06)") },
-                        modifier = Modifier.fillMaxWidth(), singleLine = true,
-                        shape = RoundedCornerShape(8.dp)
+                        modifier = Modifier.fillMaxWidth().clickable {
+                            val cal = java.util.Calendar.getInstance()
+                            android.app.DatePickerDialog(context, { _, year, month, _ ->
+                                period = "$year-${(month + 1).toString().padStart(2, '0')}"
+                            }, cal.get(java.util.Calendar.YEAR), cal.get(java.util.Calendar.MONTH), cal.get(java.util.Calendar.DAY_OF_MONTH)).show()
+                        }, singleLine = true, shape = RoundedCornerShape(8.dp)
                     )
                 }
                 item {
                     OutlinedTextField(
-                        value = otherCostStr, onValueChange = { otherCostStr = it },
+                        value = otherCostStr, onValueChange = { otherCostStr = it.filter { char -> char.isDigit() } },
                         label = { Text("Chi phí phát sinh (nếu có)") },
                         modifier = Modifier.fillMaxWidth(), singleLine = true,
-                        shape = RoundedCornerShape(8.dp)
+                        shape = RoundedCornerShape(8.dp), keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number), visualTransformation = CurrencyVisualTransformation()
                     )
                 }
                 item {
@@ -1125,11 +1204,12 @@ internal fun SubmitPaymentFormDialog(
                     Spacer(Modifier.height(4.dp))
                     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                         Button(
-                            onClick = { receiptImage = "data:image/png;base64,iVBORw0KGgoAAA..." },
+                            onClick = { imagePicker.launch("image/*") },
                             shape = RoundedCornerShape(8.dp),
-                            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF64748B))
+                            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF64748B)),
+                            enabled = !picking
                         ) {
-                            Text(if (receiptImage.isBlank()) "Đính kèm ảnh" else "Đã đính kèm ảnh", fontWeight = FontWeight.Bold)
+                            Text(if (picking) "Đang đọc ảnh..." else if (receiptImage.isBlank()) "Chọn ảnh biên lai" else "Đổi ảnh khác", fontWeight = FontWeight.Bold)
                         }
                         if (receiptImage.isNotBlank()) {
                             Text("✓ Đã chọn file ảnh", color = Color(0xFF10B981), style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.Medium)
@@ -1317,7 +1397,28 @@ internal fun DetailDialog(item: RentalItem, screen: AppScreen, onDismiss: () -> 
                         "unitPrice" -> "Đơn giá"
                         else -> it.first
                     }
-                    DetailRow(displayKey, it.second) 
+                    if (it.first == "receiptImage" && it.second.startsWith("data:image")) {
+                        Text("Ảnh biên lai:", color = Color.White.copy(alpha=0.7f), style = MaterialTheme.typography.labelMedium)
+                        val base64String = it.second.substringAfter("base64,")
+                        try {
+                            val bytes = android.util.Base64.decode(base64String, android.util.Base64.DEFAULT)
+                            val bitmap = android.graphics.BitmapFactory.decodeByteArray(bytes, 0, bytes.size)
+                            if (bitmap != null) {
+                                androidx.compose.foundation.Image(
+                                    bitmap = androidx.compose.ui.graphics.asImageBitmap(bitmap),
+                                    contentDescription = "Ảnh biên lai",
+                                    modifier = Modifier.fillMaxWidth().height(300.dp).clip(RoundedCornerShape(8.dp)),
+                                    contentScale = androidx.compose.ui.layout.ContentScale.Crop
+                                )
+                            } else {
+                                Text("Lỗi hiển thị ảnh", color = Color.Red)
+                            }
+                        } catch (e: Exception) {
+                            Text("Lỗi dữ liệu ảnh", color = Color.Red)
+                        }
+                    } else {
+                        DetailRow(displayKey, it.second) 
+                    }
                 }
             }
         },
@@ -1520,6 +1621,8 @@ internal fun RespondIncidentDialog(
     )
 }
 
+
+
 @Composable
 internal fun NoticeFormDialog(
     houses: List<RentalItem>,
@@ -1529,7 +1632,7 @@ internal fun NoticeFormDialog(
 ) {
     var title by remember { mutableStateOf("") }
     var content by remember { mutableStateOf("") }
-    var targetType by remember { mutableStateOf("all") }
+    var targetType by remember { mutableStateOf("house") }
     var selectedHouseId by remember { mutableStateOf("") }
     var selectedRoomId by remember { mutableStateOf("") }
     var error by remember { mutableStateOf<String?>(null) }
@@ -1577,9 +1680,9 @@ internal fun NoticeFormDialog(
                     Text("Gửi đến", style = MaterialTheme.typography.labelMedium, color = Color(0xFF64748B))
                     Spacer(Modifier.height(4.dp))
                     LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        items(listOf("all" to "Tất cả mọi người", "room" to "Theo phòng")) { (k, v) ->
+                        items(listOf("house" to "Theo nhà trọ", "room" to "Theo phòng")) { (k, v) ->
                             FilterChip(
-                                selected = targetType == k || (targetType == "room" && k == "room"),
+                                selected = targetType == k,
                                 onClick = { targetType = k; selectedRoomId = ""; selectedHouseId = "" },
                                 label = { Text(v) },
                                 shape = RoundedCornerShape(8.dp)
@@ -1587,29 +1690,28 @@ internal fun NoticeFormDialog(
                         }
                     }
                 }
-                if (targetType == "room") {
-                    item {
-                        Text("Chọn Nhà Trọ", style = MaterialTheme.typography.labelMedium, color = Color(0xFF64748B))
-                        Spacer(Modifier.height(4.dp))
-                        Box {
-                            OutlinedTextField(
-                                value = houses.find { it.id == selectedHouseId }?.title ?: "Tất cả nhà trọ", 
-                                onValueChange = {}, readOnly = true,
-                                modifier = Modifier.fillMaxWidth().clickable { houseExpanded = true },
-                                singleLine = true, shape = RoundedCornerShape(8.dp), colors = fieldColors, enabled = false
-                            )
-                            Box(modifier = Modifier.matchParentSize().clickable { houseExpanded = true })
-                            DropdownMenu(expanded = houseExpanded, onDismissRequest = { houseExpanded = false }) {
-                                DropdownMenuItem(text = { Text("Tất cả nhà trọ") }, onClick = { selectedHouseId = ""; selectedRoomId = ""; houseExpanded = false })
-                                houses.forEach { house ->
-                                    DropdownMenuItem(
-                                        text = { Text("${house.id} - ${house.title}") },
-                                        onClick = { selectedHouseId = house.id; selectedRoomId = ""; houseExpanded = false }
-                                    )
-                                }
+                item {
+                    Text("Chọn Nhà Trọ *", style = MaterialTheme.typography.labelMedium, color = Color(0xFF64748B))
+                    Spacer(Modifier.height(4.dp))
+                    Box {
+                        OutlinedTextField(
+                            value = houses.find { it.id == selectedHouseId }?.title ?: "Chọn nhà trọ...", 
+                            onValueChange = {}, readOnly = true,
+                            modifier = Modifier.fillMaxWidth().clickable { houseExpanded = true },
+                            singleLine = true, shape = RoundedCornerShape(8.dp), colors = fieldColors, enabled = false
+                        )
+                        Box(modifier = Modifier.matchParentSize().clickable { houseExpanded = true })
+                        DropdownMenu(expanded = houseExpanded, onDismissRequest = { houseExpanded = false }) {
+                            houses.forEach { house ->
+                                DropdownMenuItem(
+                                    text = { Text("${house.id} - ${house.title}") },
+                                    onClick = { selectedHouseId = house.id; selectedRoomId = ""; houseExpanded = false }
+                                )
                             }
                         }
                     }
+                }
+                if (targetType == "room") {
                     item {
                         Text("Chọn Phòng *", style = MaterialTheme.typography.labelMedium, color = Color(0xFF64748B))
                         Spacer(Modifier.height(4.dp))

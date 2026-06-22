@@ -147,11 +147,12 @@ internal fun AppHeader(title: String, onMenu: () -> Unit, onLogout: () -> Unit, 
     ) {
         Box(
             modifier = Modifier
+                .size(36.dp)
                 .clip(CutCornerShape(8.dp))
                 .background(Color.White.copy(alpha = 0.15f))
                 .border(1.dp, Color.White.copy(alpha = 0.3f), CutCornerShape(8.dp))
-                .clickable { onMenu() }
-                .padding(8.dp)
+                .clickable { onMenu() },
+            contentAlignment = Alignment.Center
         ) {
             Icon(Icons.Default.Menu, contentDescription = "Menu", tint = Color.White, modifier = Modifier.size(20.dp))
         }
@@ -172,22 +173,24 @@ internal fun AppHeader(title: String, onMenu: () -> Unit, onLogout: () -> Unit, 
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             Box(
                 modifier = Modifier
+                    .size(36.dp)
                     .clip(CutCornerShape(8.dp))
                     .background(Color.White.copy(alpha = 0.15f))
                     .border(1.dp, Color.White.copy(alpha = 0.3f), CutCornerShape(8.dp))
-                    .clickable { onToggleTheme() }
-                    .padding(8.dp)
+                    .clickable { onToggleTheme() },
+                contentAlignment = Alignment.Center
             ) {
-                Text(if (LocalAppThemeIsLight.current) "☼" else "☾", fontSize = 16.sp, color = Color.White)
+                Text(if (LocalAppThemeIsLight.current) "☼" else "☾", fontSize = 18.sp, color = Color.White)
             }
             
             Box(
                 modifier = Modifier
+                    .size(36.dp)
                     .clip(CutCornerShape(8.dp))
                     .background(Color.White.copy(alpha = 0.15f))
                     .border(1.dp, Color.White.copy(alpha = 0.3f), CutCornerShape(8.dp))
-                    .clickable { onLogout() }
-                    .padding(8.dp)
+                    .clickable { onLogout() },
+                contentAlignment = Alignment.Center
             ) {
                 Icon(Icons.Default.ExitToApp, contentDescription = "Thoát", tint = Color.White, modifier = Modifier.size(20.dp))
             }

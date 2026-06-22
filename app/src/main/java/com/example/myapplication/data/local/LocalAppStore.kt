@@ -199,7 +199,7 @@ class LocalAppStore(context: Context) {
         if (existingIndex >= 0) {
             array.put(existingIndex, json)
         } else {
-            array.put(0, json)
+            array.put(json)
         }
         items.put(screen.name, array)
         saveItems(items)

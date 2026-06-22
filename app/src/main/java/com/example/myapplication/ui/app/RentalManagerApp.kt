@@ -228,6 +228,7 @@ internal fun ModuleScreen(
     var rejectingPayment by remember { mutableStateOf<RentalItem?>(null) }
     var respondingIncident by remember { mutableStateOf<RentalItem?>(null) }
     var noticeFormOpen by remember { mutableStateOf(false) }
+    var registeringService by remember { mutableStateOf<RentalItem?>(null) }
     val role = session?.role ?: UserRole.NguoiDung
     val canManage = canManageScreen(role, screen)
 
@@ -246,7 +247,7 @@ internal fun ModuleScreen(
             val result = repository.list(AppScreen.Houses, session)
             if (result is UiState.Content) houses = result.data
         }
-        if (screen in setOf(AppScreen.Electric, AppScreen.Water, AppScreen.Invoices, AppScreen.Payments, AppScreen.Notices, AppScreen.Contracts, AppScreen.RentRequests, AppScreen.RenewRequests, AppScreen.Incidents)) {
+        if (screen in setOf(AppScreen.Electric, AppScreen.Water, AppScreen.Invoices, AppScreen.Payments, AppScreen.Notices, AppScreen.Contracts, AppScreen.RentRequests, AppScreen.RenewRequests, AppScreen.Incidents, AppScreen.Services)) {
             val resultH = repository.list(AppScreen.Houses, session)
             if (resultH is UiState.Content) houses = resultH.data
             val resultR = repository.list(AppScreen.Rooms, session)
@@ -483,7 +484,8 @@ internal fun ModuleScreen(
                                     repository.markNoticeAsRead(item.id, session)
                                         .onSuccess { load() }
                                 }
-                            }
+                            },
+                            onRegisterService = { registeringService = item }
                         )
                     }
                 }
@@ -615,6 +617,33 @@ internal fun ModuleScreen(
                     repository.requestRoom(room.id, session, duration, note)
                         .onSuccess { rentRequestRoom = null; load() }
                         .onFailure { actionError = it.message ?: "Không thể gửi yêu cầu thuê phòng." }
+                }
+            }
+        )
+    }
+
+    registeringService?.let { service ->
+        RegisterServiceDialog(
+            service = service,
+            onDismiss = { registeringService = null },
+            onSubmit = { note ->
+                actionError = null
+                val regItem = RentalItem(
+                    id = repository.nextId(AppScreen.ServiceRegs),
+                    title = "Đăng ký dịch vụ ${service.title}",
+                    status = "Đang sử dụng",
+                    value = service.value,
+                    note = note,
+                    details = listOf(
+                        "serviceId" to service.id,
+                        "tenantUsername" to (session?.username ?: ""),
+                        "roomId" to service.detail("roomId")
+                    )
+                )
+                scope.launch {
+                    repository.saveItem(AppScreen.ServiceRegs, regItem, session)
+                        .onSuccess { registeringService = null; load() }
+                        .onFailure { actionError = it.message ?: "Không thể đăng ký dịch vụ." }
                 }
             }
         )
@@ -1025,6 +1054,54 @@ internal fun RentalListCard(
     onDelete: () -> Unit
 ) {
     val accent = statusColor(item.status, screen)
+    if (screen == AppScreen.Notices) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clip(CutCornerShape(16.dp))
+                .background(AppCardBg)
+                .border(1.dp, accent.copy(alpha = 0.35f), CutCornerShape(16.dp))
+                .padding(14.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Box(Modifier.size(4.dp, 24.dp).clip(RoundedCornerShape(4.dp)).background(accent))
+                Spacer(Modifier.width(10.dp))
+                Text(item.title, fontWeight = FontWeight.Bold, color = Color.White, fontSize = 15.sp, modifier = Modifier.weight(1f))
+                if (item.status == "Mới") {
+                    Box(modifier = Modifier.clip(RoundedCornerShape(4.dp)).background(Color.Red).padding(horizontal = 6.dp, vertical = 2.dp)) {
+                        Text("Mới", color = Color.White, fontSize = 10.sp, fontWeight = FontWeight.Bold)
+                    }
+                }
+            }
+            Text(item.note, color = Color.White.copy(alpha = 0.8f), fontSize = 13.sp)
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
+                if (!canManage && item.status == "Mới") {
+                    Box(
+                        modifier = Modifier
+                            .weight(1f).height(36.dp)
+                            .clip(CutCornerShape(8.dp))
+                            .background(accent.copy(alpha = 0.25f))
+                            .border(1.dp, accent.copy(alpha = 0.5f), CutCornerShape(8.dp))
+                            .clickable { onOpen() },
+                        contentAlignment = Alignment.Center
+                    ) { Text("Đánh dấu đã đọc", color = accent, fontWeight = FontWeight.Bold, fontSize = 12.sp) }
+                }
+                if (canManage) {
+                    Box(
+                        modifier = Modifier
+                            .weight(1f).height(36.dp)
+                            .clip(CutCornerShape(8.dp))
+                            .background(Color(0xFFF87171).copy(alpha = 0.15f))
+                            .border(1.dp, Color(0xFFF87171).copy(alpha = 0.4f), CutCornerShape(8.dp))
+                            .clickable { onDelete() },
+                        contentAlignment = Alignment.Center
+                    ) { Text("Xóa", color = Color(0xFFF87171), fontWeight = FontWeight.Bold, fontSize = 12.sp) }
+                }
+            }
+        }
+        return
+    }
     Column(
         modifier = Modifier
             .fillMaxWidth()
@@ -1062,7 +1139,14 @@ internal fun RentalListCard(
                 .padding(10.dp)
         ) {
             Column(verticalArrangement = Arrangement.spacedBy(3.dp)) {
-                Text(item.value, fontWeight = FontWeight.Bold, color = Color.White, fontSize = 13.sp)
+                val displayValue = if (screen in setOf(AppScreen.Rooms, AppScreen.Services, AppScreen.RoomTypes)) {
+                    item.value.toDoubleOrNull()?.let { "${moneyValue(it)} VNĐ/tháng" } ?: item.value
+                } else if (screen in setOf(AppScreen.Contracts, AppScreen.Invoices, AppScreen.Payments, AppScreen.Electric, AppScreen.Water)) {
+                    item.value.toDoubleOrNull()?.let { "${moneyValue(it)} VNĐ" } ?: item.value
+                } else {
+                    item.value
+                }
+                Text(displayValue, fontWeight = FontWeight.Bold, color = Color.White, fontSize = 13.sp)
                 if (item.note.isNotBlank()) {
                     Text(item.note, color = Color.White.copy(alpha = 0.6f), fontSize = 12.sp, maxLines = 2, overflow = TextOverflow.Ellipsis)
                 }
