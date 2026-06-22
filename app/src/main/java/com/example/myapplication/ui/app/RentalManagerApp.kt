@@ -43,6 +43,7 @@ import com.example.myapplication.domain.model.RentalItem
 import com.example.myapplication.domain.model.UiState
 import com.example.myapplication.domain.model.UserRole
 import com.example.myapplication.domain.model.UserSession
+import com.example.myapplication.domain.util.formatMoney
 import kotlinx.coroutines.launch
 
 val LocalAppThemeIsLight = compositionLocalOf { false }
@@ -629,7 +630,7 @@ internal fun ModuleScreen(
             onSubmit = { note ->
                 actionError = null
                 val regItem = RentalItem(
-                    id = repository.nextId(AppScreen.ServiceRegs),
+                    id = "",
                     title = "Đăng ký dịch vụ ${service.title}",
                     status = "Đang sử dụng",
                     value = service.value,
@@ -1140,9 +1141,9 @@ internal fun RentalListCard(
         ) {
             Column(verticalArrangement = Arrangement.spacedBy(3.dp)) {
                 val displayValue = if (screen in setOf(AppScreen.Rooms, AppScreen.Services, AppScreen.RoomTypes)) {
-                    item.value.toDoubleOrNull()?.let { "${moneyValue(it)} VNĐ/tháng" } ?: item.value
+                    item.value.toLongOrNull()?.let { "${formatMoney(it)} VNĐ/tháng" } ?: item.value
                 } else if (screen in setOf(AppScreen.Contracts, AppScreen.Invoices, AppScreen.Payments, AppScreen.Electric, AppScreen.Water)) {
-                    item.value.toDoubleOrNull()?.let { "${moneyValue(it)} VNĐ" } ?: item.value
+                    item.value.toLongOrNull()?.let { "${formatMoney(it)} VNĐ" } ?: item.value
                 } else {
                     item.value
                 }
@@ -1207,7 +1208,8 @@ internal fun ModuleActionBar(
     onRejectPayment: () -> Unit = {},
     onRespondIncident: () -> Unit = {},
     onMarkNoticeRead: () -> Unit = {},
-    onTenantConfirmRequest: () -> Unit = {}
+    onTenantConfirmRequest: () -> Unit = {},
+    onRegisterService: () -> Unit = {}
 ) {
     val showRent = role == UserRole.NguoiDung && screen == AppScreen.Rooms && item.status.equals("Còn trống", true)
     val showTenantConfirmRequest = role == UserRole.NguoiDung && screen == AppScreen.RentRequests && item.status == "Đã duyệt"
@@ -1220,8 +1222,9 @@ internal fun ModuleActionBar(
     val showPaymentDecision = role != UserRole.NguoiDung && screen == AppScreen.Payments && item.status == "Chờ xác nhận"
     val showRespondIncident = role != UserRole.NguoiDung && screen == AppScreen.Incidents && !item.status.equals("Đã khắc phục", true)
     val showMarkRead = screen == AppScreen.Notices && item.status == "Mới"
+    val showRegisterService = role == UserRole.NguoiDung && screen == AppScreen.Services
     if (!showRent && !showDecision && !showConfirm && !showRenew && !showClose && !showRenewDecision
-        && !showPayInvoice && !showPaymentDecision && !showRespondIncident && !showMarkRead && !showTenantConfirmRequest) return
+        && !showPayInvoice && !showPaymentDecision && !showRespondIncident && !showMarkRead && !showTenantConfirmRequest && !showRegisterService) return
 
     Surface(
         shape = CutCornerShape(14.dp),
@@ -1242,6 +1245,14 @@ internal fun ModuleActionBar(
                         .clickable { onRentRoom() },
                     contentAlignment = Alignment.Center
                 ) { Text("Gửi yêu cầu thuê", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 13.sp) }
+            }
+            if (showRegisterService) {
+                Button(
+                    onClick = onRegisterService,
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(10.dp),
+                    colors = ButtonDefaults.buttonColors(containerColor = AppGreenLight)
+                ) { Text("Đăng ký dịch vụ", fontWeight = FontWeight.Bold) }
             }
             if (showDecision) {
                 Button(

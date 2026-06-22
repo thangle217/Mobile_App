@@ -33,6 +33,8 @@ import com.example.myapplication.data.repository.RentalRepository
 import com.example.myapplication.domain.model.AppScreen
 import com.example.myapplication.domain.model.RentalItem
 import com.example.myapplication.domain.util.moneyValue
+import androidx.compose.ui.graphics.asImageBitmap
+import kotlinx.coroutines.launch
 
 class CurrencyVisualTransformation(val suffix: String = "") : androidx.compose.ui.text.input.VisualTransformation {
     override fun filter(text: androidx.compose.ui.text.AnnotatedString): androidx.compose.ui.text.input.TransformedText {
@@ -1125,6 +1127,28 @@ internal fun SubmitPaymentFormDialog(
     var note by remember(item) { mutableStateOf(item.note) }
     var receiptImage by remember(item) { mutableStateOf(item.detail("receiptImage")) }
     var error by remember { mutableStateOf<String?>(null) }
+    
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+    var picking by remember { mutableStateOf(false) }
+
+    val imagePicker = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri ->
+        if (uri != null) {
+            picking = true
+            scope.launch(kotlinx.coroutines.Dispatchers.IO) {
+                try {
+                    val bytes = context.contentResolver.openInputStream(uri)?.use { it.readBytes() }
+                    if (bytes != null) {
+                        val base64 = android.util.Base64.encodeToString(bytes, android.util.Base64.DEFAULT)
+                        receiptImage = "data:image/jpeg;base64,$base64"
+                    }
+                } catch (e: Exception) {
+                    error = "Lỗi đọc ảnh."
+                }
+                picking = false
+            }
+        }
+    }
 
     val unpaidInvoices = invoices.filter { it.status != "Đã thanh toán" }
     val selectedInvoice = invoices.firstOrNull { it.id == invoiceId }
@@ -1400,21 +1424,20 @@ internal fun DetailDialog(item: RentalItem, screen: AppScreen, onDismiss: () -> 
                     if (it.first == "receiptImage" && it.second.startsWith("data:image")) {
                         Text("Ảnh biên lai:", color = Color.White.copy(alpha=0.7f), style = MaterialTheme.typography.labelMedium)
                         val base64String = it.second.substringAfter("base64,")
-                        try {
+                        val bitmap = try {
                             val bytes = android.util.Base64.decode(base64String, android.util.Base64.DEFAULT)
-                            val bitmap = android.graphics.BitmapFactory.decodeByteArray(bytes, 0, bytes.size)
-                            if (bitmap != null) {
-                                androidx.compose.foundation.Image(
-                                    bitmap = androidx.compose.ui.graphics.asImageBitmap(bitmap),
-                                    contentDescription = "Ảnh biên lai",
-                                    modifier = Modifier.fillMaxWidth().height(300.dp).clip(RoundedCornerShape(8.dp)),
-                                    contentScale = androidx.compose.ui.layout.ContentScale.Crop
-                                )
-                            } else {
-                                Text("Lỗi hiển thị ảnh", color = Color.Red)
-                            }
-                        } catch (e: Exception) {
-                            Text("Lỗi dữ liệu ảnh", color = Color.Red)
+                            android.graphics.BitmapFactory.decodeByteArray(bytes, 0, bytes.size)
+                        } catch (e: Exception) { null }
+                        
+                        if (bitmap != null) {
+                            androidx.compose.foundation.Image(
+                                bitmap = bitmap.asImageBitmap(),
+                                contentDescription = "Ảnh biên lai",
+                                modifier = Modifier.fillMaxWidth().height(300.dp).clip(RoundedCornerShape(8.dp)),
+                                contentScale = androidx.compose.ui.layout.ContentScale.Crop
+                            )
+                        } else {
+                            Text("Lỗi hiển thị ảnh", color = Color.Red)
                         }
                     } else {
                         DetailRow(displayKey, it.second) 
