@@ -33,7 +33,7 @@ interface IRentalRepository {
     ): Result<RentalItem>
     suspend fun closeContract(contractId: String, cancel: Boolean, session: UserSession?): Result<RentalItem>
     suspend fun createRenewRequest(contractId: String, session: UserSession?, newEndDate: String, note: String): Result<RentalItem>
-    suspend fun decideRenewRequest(requestId: String, approve: Boolean, session: UserSession?): Result<RentalItem>
+    suspend fun decideRenewRequest(requestId: String, approve: Boolean, session: UserSession?, newEndDateOverride: String? = null, newDepositOverride: String? = null): Result<RentalItem>
     suspend fun getLatestUtilityIndex(screen: AppScreen, roomId: String): Result<Double>
     suspend fun saveUtilityReading(
         screen: AppScreen,

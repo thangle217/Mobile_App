@@ -241,14 +241,16 @@ internal fun ModuleScreen(
         }
     }
 
-    LaunchedEffect(screen) {
-        if (screen == AppScreen.Rooms) {
-            val result = repository.list(AppScreen.Houses, null)
+    LaunchedEffect(screen, session) {
+        if (screen in setOf(AppScreen.Rooms, AppScreen.RoomTypes, AppScreen.Contracts, AppScreen.RentRequests, AppScreen.RenewRequests, AppScreen.Notices)) {
+            val result = repository.list(AppScreen.Houses, session)
             if (result is UiState.Content) houses = result.data
         }
-        if (screen in setOf(AppScreen.Electric, AppScreen.Water, AppScreen.Invoices, AppScreen.Payments, AppScreen.Notices)) {
-            val result = repository.list(AppScreen.Rooms, null)
-            if (result is UiState.Content) rooms = result.data
+        if (screen in setOf(AppScreen.Electric, AppScreen.Water, AppScreen.Invoices, AppScreen.Payments, AppScreen.Notices, AppScreen.Contracts, AppScreen.RentRequests, AppScreen.RenewRequests, AppScreen.Incidents)) {
+            val resultH = repository.list(AppScreen.Houses, session)
+            if (resultH is UiState.Content) houses = resultH.data
+            val resultR = repository.list(AppScreen.Rooms, session)
+            if (resultR is UiState.Content) rooms = resultR.data
         }
         if (screen == AppScreen.Payments) {
             val result = repository.list(AppScreen.Invoices, session)
@@ -561,6 +563,7 @@ internal fun ModuleScreen(
     contractEditing?.let { item ->
         ContractEditorDialog(
             item = item,
+            houses = houses,
             rooms = rooms,
             onDismiss = { contractEditing = null },
             onSave = { rId, tenant, start, end, dep, note, status ->

@@ -246,7 +246,35 @@ class CloudDataSource {
         docRef.set(data).await()
     }
 
+    private suspend fun runCronJobs() {
+        val today = java.util.Calendar.getInstance().time
+        val format = java.text.SimpleDateFormat("dd/MM/yyyy", java.util.Locale.getDefault())
+        val contracts = list(AppScreen.Contracts, null).filter { it.status == "Đang hiệu lực" }
+        for (contract in contracts) {
+            val endDateStr = contract.detail("endDate")
+            if (endDateStr.isNotBlank()) {
+                try {
+                    val endDate = format.parse(endDateStr)
+                    if (endDate != null && endDate.before(today)) {
+                        upsert(AppScreen.Contracts, contract.copy(status = "Kết thúc"))
+                        val room = list(AppScreen.Rooms, null).firstOrNull { it.id == contract.detail("roomId") }
+                        if (room != null) {
+                            upsert(
+                                AppScreen.Rooms, 
+                                room.copy(
+                                    status = "Còn trống",
+                                    details = room.details.removeDetail("tenantUsername").removeDetail("tenantName").removeDetail("contractId")
+                                )
+                            )
+                        }
+                    }
+                } catch (e: Exception) {}
+            }
+        }
+    }
+
     suspend fun dashboard(): DashboardSummary {
+        runCronJobs()
         return DashboardSummary()
     }
 
@@ -255,10 +283,45 @@ class CloudDataSource {
     }
     
     suspend fun delete(screen: AppScreen, id: String) {
+        when (screen) {
+            AppScreen.Houses -> {
+                val rooms = list(AppScreen.Rooms, null).filter { it.detail("houseId") == id || it.note.contains(id) }
+                require(rooms.isEmpty()) { "Không thể xóa nhà trọ đang có phòng." }
+            }
+            AppScreen.Rooms -> {
+                val hasContracts = list(AppScreen.Contracts, null).any { it.detail("roomId") == id }
+                val hasInvoices = list(AppScreen.Invoices, null).any { it.detail("roomId") == id }
+                if (hasContracts || hasInvoices) {
+                    val room = list(AppScreen.Rooms, null).firstOrNull { it.id == id } ?: return
+                    upsert(AppScreen.Rooms, room.copy(status = "Ngưng hoạt động"))
+                    return
+                }
+            }
+            AppScreen.Contracts -> {
+                val contract = list(AppScreen.Contracts, null).firstOrNull { it.id == id } ?: return
+                require(contract.status != "Đang hiệu lực") { "Không thể xóa hợp đồng đang hiệu lực." }
+            }
+            AppScreen.RentRequests -> {
+                val req = list(AppScreen.RentRequests, null).firstOrNull { it.id == id } ?: return
+                require(req.status.contains("Chờ", true)) { "Chỉ được phép xóa yêu cầu thuê đang chờ duyệt." }
+            }
+            AppScreen.Invoices -> {
+                val invoice = list(AppScreen.Invoices, null).firstOrNull { it.id == id } ?: return
+                require(invoice.status != "Đã thanh toán") { "Không thể xóa hóa đơn đã thanh toán." }
+            }
+            else -> {}
+        }
         db.collection(getCollectionName(screen)).document(id).delete().await()
     }
 
     suspend fun createRentRequest(roomId: String, session: UserSession, duration: String, note: String): RentalItem {
+        val exists = list(AppScreen.RentRequests, session).any {
+            it.detail("roomId") == roomId &&
+                it.detail("tenantUsername").equals(session.username, true) &&
+                it.status.contains("Chờ", true)
+        }
+        require(!exists) { "Bạn đã có yêu cầu thuê phòng này đang chờ xử lý." }
+
         val docRef = db.collection("rentRequests").document()
         val details = listOf("roomId" to roomId, "tenantUsername" to session.username, "duration" to duration)
         val item = RentalItem(docRef.id, "Yêu cầu thuê phòng $roomId", "Chờ duyệt", duration, note, details)
@@ -402,3 +465,6 @@ class CloudDataSource {
         }
     }
 }
+
+private fun RentalItem.detail(key: String): String = details.firstOrNull { it.first == key }?.second.orEmpty()
+private fun List<Pair<String, String>>.removeDetail(key: String) = filter { it.first != key }

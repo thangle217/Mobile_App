@@ -131,7 +131,38 @@ class LocalAppStore(context: Context) {
         return "data:$mimeType;base64,${Base64.encodeToString(bytes, Base64.NO_WRAP)}"
     }
 
+    private fun runCronJobs() {
+        val today = java.util.Calendar.getInstance().time
+        val format = java.text.SimpleDateFormat("dd/MM/yyyy", java.util.Locale.getDefault())
+        list(AppScreen.Contracts).filter { it.status == "Đang hiệu lực" }.forEach { contract ->
+            val endDateStr = contract.detail("endDate")
+            if (endDateStr.isNotBlank()) {
+                try {
+                    val endDate = format.parse(endDateStr)
+                    if (endDate != null && endDate.before(today)) {
+                        upsert(AppScreen.Contracts, contract.copy(status = "Kết thúc"))
+                        val room = list(AppScreen.Rooms).firstOrNull { it.id == contract.detail("roomId") }
+                        if (room != null) {
+                            upsert(
+                                AppScreen.Rooms, 
+                                room.copy(
+                                    status = "Còn trống",
+                                    details = room.details.removeDetail("tenantUsername").removeDetail("tenantName").removeDetail("contractId")
+                                )
+                            )
+                        }
+                        val tenant = list(AppScreen.Tenants).firstOrNull { it.detail("contractId") == contract.id }
+                        if (tenant != null) {
+                            upsert(AppScreen.Tenants, tenant.copy(status = "Đã rời phòng"))
+                        }
+                    }
+                } catch (e: Exception) {}
+            }
+        }
+    }
+
     fun dashboard(): DashboardSummary {
+        runCronJobs()
         val rooms = list(AppScreen.Rooms)
         val invoices = list(AppScreen.Invoices)
         val payments = list(AppScreen.Payments)
@@ -176,6 +207,36 @@ class LocalAppStore(context: Context) {
     }
 
     fun delete(screen: AppScreen, id: String) {
+        // --- Data Constraints (Business Rules) ---
+        when (screen) {
+            AppScreen.Houses -> {
+                val hasRooms = list(AppScreen.Rooms).any { it.detail("houseId") == id || it.note.contains(id) } // Simple check
+                require(!hasRooms) { "Không thể xóa nhà trọ đang có phòng. Cần xóa phòng hoặc chuyển trạng thái." }
+            }
+            AppScreen.Rooms -> {
+                val hasContracts = list(AppScreen.Contracts).any { it.detail("roomId") == id }
+                val hasInvoices = list(AppScreen.Invoices).any { it.detail("roomId") == id }
+                if (hasContracts || hasInvoices) {
+                    val room = list(AppScreen.Rooms).firstOrNull { it.id == id } ?: return
+                    upsert(AppScreen.Rooms, room.copy(status = "Ngưng hoạt động"))
+                    return // Soft delete instead of physical delete
+                }
+            }
+            AppScreen.Contracts -> {
+                val contract = list(AppScreen.Contracts).firstOrNull { it.id == id } ?: return
+                require(contract.status != "Đang hiệu lực") { "Tuyệt đối không thể xóa hợp đồng đang hiệu lực. Hãy kết thúc hoặc hủy hợp đồng." }
+            }
+            AppScreen.RentRequests -> {
+                val req = list(AppScreen.RentRequests).firstOrNull { it.id == id } ?: return
+                require(req.status.contains("Chờ", true)) { "Chỉ được phép xóa (hủy) các yêu cầu thuê đang chờ duyệt." }
+            }
+            AppScreen.Invoices -> {
+                val invoice = list(AppScreen.Invoices).firstOrNull { it.id == id } ?: return
+                require(invoice.status != "Đã thanh toán") { "Không thể xóa hóa đơn đã thanh toán hoàn tất." }
+            }
+            else -> {}
+        }
+
         val items = itemsObject()
         val next = JSONArray()
         items.optJSONArray(screen.name)?.objects().orEmpty()
@@ -486,23 +547,36 @@ class LocalAppStore(context: Context) {
         return request
     }
 
-    fun decideRenewRequest(requestId: String, approve: Boolean, session: UserSession): RentalItem {
+    fun decideRenewRequest(requestId: String, approve: Boolean, session: UserSession, newEndDateOverride: String? = null, newDepositOverride: String? = null): RentalItem {
         val request = list(AppScreen.RenewRequests).firstOrNull { it.id == requestId } ?: error("Không tìm thấy yêu cầu gia hạn.")
         require(request.status.contains("Chờ", true)) { "Yêu cầu gia hạn này đã được xử lý." }
+        
+        val finalEndDate = newEndDateOverride?.takeIf { it.isNotBlank() } ?: request.detail("newEndDate")
+        
         val nextRequest = request.copy(
             status = if (approve) "Đã duyệt" else "Từ chối",
+            value = "Đến $finalEndDate",
             note = if (approve) "${request.note}\nĐã duyệt bởi ${session.displayName}." else "${request.note}\nĐã từ chối bởi ${session.displayName}."
         )
         upsert(AppScreen.RenewRequests, nextRequest)
+        
         if (approve) {
             val contract = list(AppScreen.Contracts).firstOrNull { it.id == request.detail("contractId") }
                 ?: error("Không tìm thấy hợp đồng cần gia hạn.")
+            
+            var newDetails = contract.details.replaceDetail("endDate", finalEndDate)
+            var depositNote = ""
+            if (!newDepositOverride.isNullOrBlank()) {
+                newDetails = newDetails.replaceDetail("deposit", newDepositOverride)
+                depositNote = ", cọc mới: $newDepositOverride"
+            }
+            
             upsert(
                 AppScreen.Contracts,
                 contract.copy(
-                    value = "${contract.detail("startDate")} - ${request.detail("newEndDate")}",
-                    note = "${contract.note}\nĐã gia hạn đến ${request.detail("newEndDate")}.",
-                    details = contract.details.replaceDetail("endDate", request.detail("newEndDate"))
+                    value = "${contract.detail("startDate")} - $finalEndDate",
+                    note = "${contract.note}\nĐã gia hạn đến $finalEndDate$depositNote.",
+                    details = newDetails
                 )
             )
         }
@@ -526,9 +600,14 @@ class LocalAppStore(context: Context) {
         price: Double
     ): RentalItem {
         val room = list(AppScreen.Rooms).firstOrNull { it.id == roomId } ?: error("Không tìm thấy phòng.")
+        require(newIndex >= oldIndex) { "Chỉ số mới ($newIndex) không được nhỏ hơn chỉ số cũ ($oldIndex)." }
+        
+        val exists = list(screen).any { it.detail("roomId") == roomId && it.detail("period") == period }
+        require(!exists) { "Chỉ số kỳ $period của phòng này đã được ghi." }
+
         val roomName = room.title
         val tenantUsername = room.detail("tenantUsername")
-        val consumption = (newIndex - oldIndex).coerceAtLeast(0.0)
+        val consumption = newIndex - oldIndex
         val amount = consumption * price
         val unit = if (screen == AppScreen.Electric) "kWh" else "m3"
 
@@ -732,11 +811,25 @@ class LocalAppStore(context: Context) {
         )
         upsert(AppScreen.Payments, nextPayment)
 
-        val nextInvoice = invoice.copy(
-            status = if (approve) "Đã thanh toán" else "Chưa thanh toán",
-            note = invoice.note + (if (approve) "" else " (Bị từ chối thanh toán: ${rejectReason.orEmpty()})")
-        )
-        upsert(AppScreen.Invoices, nextInvoice)
+        if (approve) {
+            val totalAmount = moneyValue(invoice.value)
+            val approvedPaymentsSum = list(AppScreen.Payments)
+                .filter { it.detail("invoiceId") == invoiceId && it.status == "Đã xác nhận" }
+                .sumOf { moneyValue(it.value) }
+            
+            val isFullyPaid = approvedPaymentsSum >= totalAmount
+            val nextInvoice = invoice.copy(
+                status = if (isFullyPaid) "Đã thanh toán" else "Chưa thanh toán",
+                note = invoice.note + "\nĐã thanh toán: ${com.example.myapplication.domain.util.formatMoney(approvedPaymentsSum)} / ${com.example.myapplication.domain.util.formatMoney(totalAmount)}"
+            )
+            upsert(AppScreen.Invoices, nextInvoice)
+        } else {
+            val nextInvoice = invoice.copy(
+                status = if (list(AppScreen.Payments).none { it.detail("invoiceId") == invoiceId && it.status == "Chờ xác nhận" }) "Chưa thanh toán" else invoice.status,
+                note = invoice.note + "\n(Bị từ chối thanh toán: ${rejectReason.orEmpty()})"
+            )
+            upsert(AppScreen.Invoices, nextInvoice)
+        }
 
         // Thông báo cho người thuê
         val tenantUsername = payment.detail("tenantUsername")
@@ -857,7 +950,7 @@ class LocalAppStore(context: Context) {
         try {
             // Only check version - do NOT call list() here (could fail on restored/corrupt prefs)
             val currentVersion = prefs.getInt("seed_version", 0)
-            val targetVersion = 8
+            val targetVersion = 9
             if (currentVersion >= targetVersion) return
 
             // Wipe all existing (possibly corrupted or backed-up) data
@@ -978,33 +1071,7 @@ class LocalAppStore(context: Context) {
         chuTroData: List<Triple<String, String, String>>,
         tenantNames: List<String>
     ): JSONObject {
-        // Simple money formatter - no locale dependency, cannot throw
-        fun fmt(v: Long): String {
-            val millions = v / 1_000_000
-            val hundreds = (v % 1_000_000) / 100_000
-            return if (hundreds == 0L) "${millions} trieu/thang" else "${millions},${hundreds} trieu/thang"
-        }
-        fun fmtAmt(v: Long): String {
-            val millions = v / 1_000_000
-            val hundreds = (v % 1_000_000) / 100_000
-            return if (hundreds == 0L) "${millions} trieu" else "${millions},${hundreds} trieu"
-        }
         val obj = JSONObject()
-        val housesArr = JSONArray()
-        val roomTypesArr = JSONArray()
-        val roomsArr = JSONArray()
-        val servicesArr = JSONArray()
-        val tenantsArr = JSONArray()
-        val contractsArr = JSONArray()
-        val invoicesArr = JSONArray()
-        val paymentsArr = JSONArray()
-        val serviceRegsArr = JSONArray()
-        val electricArr = JSONArray()
-        val waterArr = JSONArray()
-        val rentRequestsArr = JSONArray()
-        val renewRequestsArr = JSONArray()
-        val incidentsArr = JSONArray()
-        val noticesArr = JSONArray()
         val usersArr = JSONArray()
 
         usersArr.put(item("U001", "Admin hệ thống", "Admin", "admin@demo.local", "Quản lý toàn bộ hệ thống"))
@@ -1017,98 +1084,21 @@ class LocalAppStore(context: Context) {
             usersArr.put(item("U${(i+7).toString().padStart(3, '0')}", name, "Người thuê", email, "Tài khoản đăng ký trong app"))
         }
 
-        val houseNames = listOf("Nhà trọ An Bình", "Ký túc xá Mini Hoa Sen", "Căn hộ dịch vụ Minh Quân", "Nhà trọ Bình Minh", "Studio Green Home", "Nhà trọ Tân Phú", "Căn hộ Blue Sky", "Nhà trọ Gần Đại Học", "Khu phòng trọ Sunrise", "Nhà trọ Mộc Lan")
-        val addresses = listOf("Lê Lợi", "Nguyễn Văn Cừ", "Phạm Văn Đồng", "Cộng Hòa", "Điện Biên Phủ")
-
-        var roomIndex = 1
-        var tenantIndex = 0
-
-        houseNames.forEachIndexed { i, houseName ->
-            val houseId = "NT${(i+1).toString().padStart(2, '0')}"
-            val chuTroUsername = chuTroData[i % chuTroData.size].first
-            housesArr.put(itemWithDetails(houseId, houseName, "Đang hoạt động", "4 phòng", "${100 + i * 7} ${addresses[i % 5]}, TP.HCM", listOf("createdBy" to chuTroUsername)))
-
-            roomTypesArr.put(itemWithDetails("LP${i*3 + 1}", "Phòng thường", "Đang dùng", "2.000.000đ - 3.000.000đ", "Phòng cơ bản, chi phí hợp lý", listOf("houseId" to houseId, "createdBy" to chuTroUsername)))
-            roomTypesArr.put(itemWithDetails("LP${i*3 + 2}", "Phòng gác lửng", "Đang dùng", "3.000.000đ - 4.000.000đ", "Có gác, tối ưu không gian", listOf("houseId" to houseId, "createdBy" to chuTroUsername)))
-            roomTypesArr.put(itemWithDetails("LP${i*3 + 3}", "Studio", "Đang dùng", "4.000.000đ - 6.000.000đ", "Rộng, có bếp và nội thất cơ bản", listOf("houseId" to houseId, "createdBy" to chuTroUsername)))
-
-            servicesArr.put(itemWithDetails("DV${i*4 + 1}", "Internet", "Tính phí", "100.000đ/tháng", "Tính theo phòng", listOf("houseId" to houseId, "createdBy" to chuTroUsername)))
-            servicesArr.put(itemWithDetails("DV${i*4 + 2}", "Vệ sinh", "Tính phí", "60.000đ/tháng", "Tính theo phòng", listOf("houseId" to houseId, "createdBy" to chuTroUsername)))
-            servicesArr.put(itemWithDetails("DV${i*4 + 3}", "Giữ xe máy", "Tính phí", "90.000đ/tháng", "Tính theo phòng", listOf("houseId" to houseId, "createdBy" to chuTroUsername)))
-            servicesArr.put(itemWithDetails("DV${i*4 + 4}", "Máy giặt chung", "Tính phí", "70.000đ/tháng", "Tính theo phòng", listOf("houseId" to houseId, "createdBy" to chuTroUsername)))
-
-            for (j in 1..4) {
-                val roomId = "P${roomIndex.toString().padStart(3, '0')}"
-                val roomName = "${('A' + i % 5)}${j.toString().padStart(2, '0')}"
-                val isRented = j <= 2
-                val isRepair = !isRented && (roomIndex % 3 == 0)
-                val status = if (isRented) "Đã thuê" else if (isRepair) "Đang sửa chữa" else "Còn trống"
-                val price = 1_800_000L + (j.toLong() * 450_000L) + ((roomIndex.toLong() % 4L) * 250_000L)
-                val priceStr = fmt(price)
-                
-                var details = listOf("houseId" to houseId, "createdBy" to chuTroUsername)
-
-                if (isRented && tenantIndex < tenantNames.size) {
-                    val tenantUsername = if (tenantIndex == 0) "nguoithue" else "nguoithue${tenantIndex+1}"
-                    val tName = tenantNames[tenantIndex]
-                    val contractId = "HD${tenantIndex.toString().padStart(3, '0')}"
-                    
-                    details = details + listOf("tenantUsername" to tenantUsername, "tenantName" to tName, "contractId" to contractId)
-                    
-                    tenantsArr.put(itemWithDetails("KT${tenantIndex.toString().padStart(3, '0')}", tName, "Đang thuê", tenantUsername, "Phòng $roomName", listOf("tenantUsername" to tenantUsername, "roomId" to roomId, "contractId" to contractId, "createdBy" to chuTroUsername)))
-                    
-                    contractsArr.put(itemWithDetails(contractId, "HopDong $roomName - $tName", "Dang hieu luc", "01/01/2026 - 31/12/2026", "Tien coc ${fmtAmt(price)}", listOf("tenantUsername" to tenantUsername, "tenantName" to tName, "roomId" to roomId, "roomName" to roomName, "startDate" to "01/01/2026", "endDate" to "31/12/2026", "deposit" to fmtAmt(price), "createdBy" to chuTroUsername)))
-                    
-                    val elecOld = 50.0 + roomIndex * 3 % 180
-                    val elecUse = 18.0 + roomIndex % 70
-                    val elecNew = elecOld + elecUse
-                    electricArr.put(itemWithDetails("D${tenantIndex.toString().padStart(3, '0')}", "Dien $roomName ky 2026-06", "Da ghi", "${elecUse.toInt()} kWh x 3500d", fmtAmt((elecUse * 3500).toLong()), listOf("roomId" to roomId, "roomName" to roomName, "period" to "2026-06", "oldIndex" to elecOld.toString(), "newIndex" to elecNew.toString(), "consumption" to elecUse.toString(), "price" to "3500.0", "amount" to (elecUse * 3500).toString(), "tenantUsername" to tenantUsername, "createdBy" to chuTroUsername)))
-
-                    val waterOld = 10.0 + roomIndex % 45
-                    val waterUse = 4.0 + roomIndex % 12
-                    val waterNew = waterOld + waterUse
-                    waterArr.put(itemWithDetails("N${tenantIndex.toString().padStart(3, '0')}", "Nuoc $roomName ky 2026-06", "Da ghi", "${waterUse.toInt()} m3 x 15000d", fmtAmt((waterUse * 15000).toLong()), listOf("roomId" to roomId, "roomName" to roomName, "period" to "2026-06", "oldIndex" to waterOld.toString(), "newIndex" to waterNew.toString(), "consumption" to waterUse.toString(), "price" to "15000.0", "amount" to (waterUse * 15000).toString(), "tenantUsername" to tenantUsername, "createdBy" to chuTroUsername)))
-
-                    serviceRegsArr.put(itemWithDetails("DK${tenantIndex.toString().padStart(3, '0')}A", "$roomName dùng Internet", "Đang sử dụng", "100.000đ/tháng", "Đăng ký kỳ 2026-06", listOf("tenantUsername" to tenantUsername, "roomId" to roomId, "createdBy" to chuTroUsername)))
-                    serviceRegsArr.put(itemWithDetails("DK${tenantIndex.toString().padStart(3, '0')}B", "$roomName dùng Vệ sinh", "Đang sử dụng", "60.000đ/tháng", "Đăng ký kỳ 2026-06", listOf("tenantUsername" to tenantUsername, "roomId" to roomId, "createdBy" to chuTroUsername)))
-                    
-                    val totalInv = price + (elecUse * 3500).toLong() + (waterUse * 15000).toLong() + 160_000L
-                    val invId = "H${tenantIndex.toString().padStart(3, '0')}"
-                    val invStatus = if (tenantIndex % 2 == 0) "Da thanh toan" else "Chua thanh toan"
-                    invoicesArr.put(itemWithDetails(invId, "HoaDon $roomName ky 2026-06", invStatus, fmtAmt(totalInv), "Tien phong + Dien + Nuoc + DichVu", listOf("tenantUsername" to tenantUsername, "roomId" to roomId, "roomName" to roomName, "period" to "2026-06", "totalAmount" to totalInv.toString(), "createdBy" to chuTroUsername)))
-
-                    if (tenantIndex % 2 == 0) {
-                        paymentsArr.put(itemWithDetails("TT${tenantIndex.toString().padStart(3, '0')}", "BienLai $roomName ky 2026-06", "Da xac nhan", fmtAmt(totalInv), "Ma GD: GD${20260600 + tenantIndex}", listOf("tenantUsername" to tenantUsername, "roomId" to roomId, "invoiceId" to invId, "createdBy" to tenantUsername)))
-                    }
-
-                    if (tenantIndex % 3 == 0) {
-                        val title = listOf("Rò nước trong phòng", "Mất điện khu vực", "Khóa cửa bị kẹt", "Máy lạnh không mát", "Wifi yếu")[tenantIndex % 5]
-                        incidentsArr.put(itemWithDetails("SC${tenantIndex.toString().padStart(3, '0')}", "$title $roomName", "Mới", "Bình thường", "Mô tả: $title", listOf("tenantUsername" to tenantUsername, "roomId" to roomId, "createdBy" to tenantUsername)))
-                    }
-
-                    tenantIndex++
-                }
-
-                roomsArr.put(itemWithDetails(roomId, roomName, status, priceStr, "Tầng $j - $houseName", details))
-                roomIndex++
-            }
-        }
-        
-        obj.put(AppScreen.Houses.name, housesArr)
-        obj.put(AppScreen.RoomTypes.name, roomTypesArr)
-        obj.put(AppScreen.Rooms.name, roomsArr)
-        obj.put(AppScreen.Tenants.name, tenantsArr)
-        obj.put(AppScreen.Contracts.name, contractsArr)
-        obj.put(AppScreen.Invoices.name, invoicesArr)
-        obj.put(AppScreen.Payments.name, paymentsArr)
-        obj.put(AppScreen.Services.name, servicesArr)
-        obj.put(AppScreen.ServiceRegs.name, serviceRegsArr)
-        obj.put(AppScreen.Electric.name, electricArr)
-        obj.put(AppScreen.Water.name, waterArr)
-        obj.put(AppScreen.RentRequests.name, rentRequestsArr)
-        obj.put(AppScreen.RenewRequests.name, renewRequestsArr)
-        obj.put(AppScreen.Incidents.name, incidentsArr)
-        obj.put(AppScreen.Notices.name, noticesArr)
+        obj.put(AppScreen.Houses.name, JSONArray())
+        obj.put(AppScreen.RoomTypes.name, JSONArray())
+        obj.put(AppScreen.Rooms.name, JSONArray())
+        obj.put(AppScreen.Tenants.name, JSONArray())
+        obj.put(AppScreen.Contracts.name, JSONArray())
+        obj.put(AppScreen.Invoices.name, JSONArray())
+        obj.put(AppScreen.Payments.name, JSONArray())
+        obj.put(AppScreen.Services.name, JSONArray())
+        obj.put(AppScreen.ServiceRegs.name, JSONArray())
+        obj.put(AppScreen.Electric.name, JSONArray())
+        obj.put(AppScreen.Water.name, JSONArray())
+        obj.put(AppScreen.RentRequests.name, JSONArray())
+        obj.put(AppScreen.RenewRequests.name, JSONArray())
+        obj.put(AppScreen.Incidents.name, JSONArray())
+        obj.put(AppScreen.Notices.name, JSONArray())
         obj.put(AppScreen.Users.name, usersArr)
         return obj
     }

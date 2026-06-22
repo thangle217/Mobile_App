@@ -172,9 +172,10 @@ class RentalRepository(context: Context) : IRentalRepository {
         store.createRenewRequest(contractId, session!!, newEndDate, note)
     }
 
-    override suspend fun decideRenewRequest(requestId: String, approve: Boolean, session: UserSession?): Result<RentalItem> = runCatching {
-        require(session?.role == UserRole.Admin || session?.role == UserRole.ChuTro) { "Chỉ Admin hoặc Chủ trọ được duyệt gia hạn." }
-        store.decideRenewRequest(requestId, approve, session!!)
+    override suspend fun decideRenewRequest(requestId: String, approve: Boolean, session: UserSession?, newEndDateOverride: String?, newDepositOverride: String?): Result<RentalItem> = runCatching {
+        requireNotNull(session) { "Bạn chưa đăng nhập." }
+        require(session.role == UserRole.Admin || session.role == UserRole.ChuTro) { "Chỉ Admin hoặc Chủ trọ được duyệt gia hạn." }
+        store.decideRenewRequest(requestId, approve, session, newEndDateOverride, newDepositOverride)
     }
 
     override suspend fun getLatestUtilityIndex(screen: AppScreen, roomId: String): Result<Double> = runCatching {

@@ -305,17 +305,17 @@ internal fun SectionTitle(text: String) {
 }
 
 internal fun screensForRole(role: UserRole): List<AppScreen> = when (role) {
-    UserRole.Admin -> AppScreen.entries
+    UserRole.Admin -> AppScreen.entries.filter { it != AppScreen.ServiceRegs }
     UserRole.NguoiDung -> listOf(
         AppScreen.Dashboard, AppScreen.Rooms, AppScreen.Contracts, AppScreen.Invoices,
-        AppScreen.Payments, AppScreen.Services, AppScreen.ServiceRegs, AppScreen.Electric,
+        AppScreen.Payments, AppScreen.Services, AppScreen.Electric,
         AppScreen.Water, AppScreen.RentRequests, AppScreen.RenewRequests, AppScreen.Incidents,
         AppScreen.Notices, AppScreen.Account
     )
     UserRole.ChuTro -> listOf(
         AppScreen.Dashboard, AppScreen.Houses, AppScreen.RoomTypes, AppScreen.Rooms,
         AppScreen.Tenants, AppScreen.Contracts, AppScreen.Invoices, AppScreen.Payments,
-        AppScreen.Services, AppScreen.ServiceRegs, AppScreen.Electric, AppScreen.Water,
+        AppScreen.Services, AppScreen.Electric, AppScreen.Water,
         AppScreen.RentRequests, AppScreen.RenewRequests, AppScreen.Incidents,
         AppScreen.Notices, AppScreen.Account
     )

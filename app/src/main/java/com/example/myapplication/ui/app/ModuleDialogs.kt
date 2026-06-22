@@ -48,13 +48,13 @@ internal fun SpecializedEditDialog(
 ) {
     when (screen) {
         AppScreen.Houses -> HouseFormDialog(item, onDismiss, onSave)
-        AppScreen.RoomTypes -> RoomTypeFormDialog(item, onDismiss, onSave)
+        AppScreen.RoomTypes -> RoomTypeFormDialog(item, houses, onDismiss, onSave)
         AppScreen.Rooms -> RoomFormDialog(item, houses, onDismiss, onSave)
-        AppScreen.Services -> ServiceFormDialog(item, onDismiss, onSave)
-        AppScreen.Electric, AppScreen.Water -> UtilityReadingFormDialog(screen, item, rooms, onDismiss, onSaveUtility, repository)
-        AppScreen.Invoices -> InvoiceFormDialog(item, rooms, onDismiss, onSaveInvoice)
+        AppScreen.Services -> ServiceFormDialog(item, houses, rooms, onDismiss, onSave)
+        AppScreen.Electric, AppScreen.Water -> UtilityReadingFormDialog(screen, item, houses, rooms, onDismiss, onSaveUtility, repository)
+        AppScreen.Invoices -> InvoiceFormDialog(item, houses, rooms, onDismiss, onSaveInvoice)
         AppScreen.Payments -> SubmitPaymentFormDialog(item, invoices, onDismiss, onSavePayment)
-        AppScreen.Incidents -> IncidentFormDialog(item, onDismiss, onSave)
+        AppScreen.Incidents -> IncidentFormDialog(item, houses, rooms, onDismiss, onSave)
         else -> EditItemDialog(screen, item, onDismiss, onSave)
     }
 }
@@ -124,10 +124,12 @@ internal fun ChangePasswordDialog(
 @Composable
 internal fun ContractEditorDialog(
     item: RentalItem,
+    houses: List<RentalItem>,
     rooms: List<RentalItem>,
     onDismiss: () -> Unit,
     onSave: (String, String, String, String, String, String, String) -> Unit
 ) {
+    var selectedHouseId by remember(item) { mutableStateOf(item.detail("houseId")) }
     var roomId by remember(item) { mutableStateOf(item.detail("roomId")) }
     var tenantUsername by remember(item) { mutableStateOf(item.detail("tenantUsername")) }
     var startDate by remember(item) { mutableStateOf(item.detail("startDate")) }
@@ -137,8 +139,11 @@ internal fun ContractEditorDialog(
     var status by remember(item) { mutableStateOf(item.status.ifBlank { "Chờ người thuê xác nhận" }) }
     var localError by remember { mutableStateOf<String?>(null) }
     
+    var houseExpanded by remember { mutableStateOf(false) }
     var roomExpanded by remember { mutableStateOf(false) }
     var statusExpanded by remember { mutableStateOf(false) }
+
+    val filteredRooms = remember(selectedHouseId, rooms) { rooms.filter { it.detail("houseId") == selectedHouseId } }
     val statuses = listOf("Chờ người thuê xác nhận", "Đang hiệu lực", "Đã thanh lý", "Hủy")
 
     val context = LocalContext.current
@@ -171,17 +176,37 @@ internal fun ContractEditorDialog(
         },
         text = {
             LazyColumn(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                item {
+                    Box {
+                        OutlinedTextField(
+                            value = houses.find { it.id == selectedHouseId }?.let { "${it.id} - ${it.title}" } ?: "Chọn nhà trọ...",
+                            onValueChange = {}, readOnly = true,
+                            label = { Text("Nhà trọ *") }, modifier = Modifier.fillMaxWidth().clickable { houseExpanded = true },
+                            singleLine = true, shape = CutCornerShape(8.dp), colors = fieldColors, enabled = false
+                        )
+                        Box(modifier = Modifier.matchParentSize().clickable { houseExpanded = true })
+                        DropdownMenu(expanded = houseExpanded, onDismissRequest = { houseExpanded = false }) {
+                            houses.forEach { house ->
+                                DropdownMenuItem(
+                                    text = { Text("${house.id} - ${house.title}") },
+                                    onClick = { selectedHouseId = house.id; roomId = ""; houseExpanded = false }
+                                )
+                            }
+                        }
+                    }
+                }
                 item { 
                     Box {
                         OutlinedTextField(
-                            value = roomId, onValueChange = {}, readOnly = true,
-                            label = { Text("Mã phòng *") }, modifier = Modifier.fillMaxWidth().clickable { roomExpanded = true },
+                            value = filteredRooms.find { it.id == roomId }?.let { "${it.id} - ${it.title}" } ?: "Chọn phòng trọ...",
+                            onValueChange = {}, readOnly = true,
+                            label = { Text("Phòng trọ *") }, modifier = Modifier.fillMaxWidth().clickable { roomExpanded = true },
                             singleLine = true, shape = CutCornerShape(8.dp), colors = fieldColors,
                             enabled = false // Disable to let Box intercept click
                         )
                         Box(modifier = Modifier.matchParentSize().clickable { roomExpanded = true })
                         DropdownMenu(expanded = roomExpanded, onDismissRequest = { roomExpanded = false }) {
-                            rooms.forEach { room ->
+                            filteredRooms.forEach { room ->
                                 DropdownMenuItem(
                                     text = { Text("${room.id} - ${room.title}") },
                                     onClick = { roomId = room.id; roomExpanded = false }
@@ -200,6 +225,36 @@ internal fun ContractEditorDialog(
                         Box(modifier = Modifier.weight(1f)) {
                             OutlinedTextField(value = endDate, onValueChange = {}, readOnly = true, label = { Text("Kết thúc *") }, modifier = Modifier.fillMaxWidth(), singleLine = true, shape = CutCornerShape(8.dp), colors = fieldColors, enabled = false)
                             Box(modifier = Modifier.matchParentSize().clickable { endDatePickerDialog.show() })
+                        }
+                    }
+                }
+                item {
+                    if (startDate.isNotBlank() && endDate.isNotBlank()) {
+                        val fmt = java.text.SimpleDateFormat("dd/MM/yyyy", java.util.Locale.getDefault())
+                        val sDate = runCatching { fmt.parse(startDate) }.getOrNull()
+                        val eDate = runCatching { fmt.parse(endDate) }.getOrNull()
+                        if (sDate != null && eDate != null) {
+                            val diffInMillies = eDate.time - sDate.time
+                            if (diffInMillies > 0) {
+                                val diff = java.util.concurrent.TimeUnit.DAYS.convert(diffInMillies, java.util.concurrent.TimeUnit.MILLISECONDS)
+                                val months = diff / 30
+                                val rPrice = com.example.myapplication.domain.util.moneyValue(filteredRooms.find { it.id == roomId }?.value ?: "0")
+                                val estimatedRent = rPrice * months
+                                Card(
+                                    shape = CutCornerShape(8.dp),
+                                    colors = androidx.compose.material3.CardDefaults.cardColors(containerColor = Color(0xFF0F766E).copy(alpha = 0.5f)),
+                                    modifier = Modifier.fillMaxWidth().padding(top = 4.dp)
+                                ) {
+                                    Column(modifier = Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                                        Text("Thời gian thuê dự kiến: $diff ngày (~$months tháng)", color = Color.White, style = MaterialTheme.typography.bodySmall)
+                                        if (months > 0) {
+                                            Text("Tổng tiền phòng dự kiến: ${com.example.myapplication.domain.util.formatMoney(estimatedRent)}", color = Color.White, style = MaterialTheme.typography.bodySmall)
+                                        }
+                                    }
+                                }
+                            } else {
+                                Text("Ngày kết thúc phải sau ngày bắt đầu.", color = Color(0xFFFCA5A5), style = MaterialTheme.typography.bodySmall)
+                            }
                         }
                     }
                 }
@@ -232,8 +287,8 @@ internal fun ContractEditorDialog(
                     .clip(CutCornerShape(10.dp))
                     .background(Brush.horizontalGradient(listOf(Color(0xFF0F766E), Color(0xFF0369A1))))
                     .clickable {
-                        if (roomId.isBlank() || tenantUsername.isBlank() || startDate.isBlank() || endDate.isBlank()) {
-                            localError = "Vui lòng nhập đủ mã phòng, người thuê, ngày bắt đầu và kết thúc."
+                        if (selectedHouseId.isBlank() || roomId.isBlank() || tenantUsername.isBlank() || startDate.isBlank() || endDate.isBlank()) {
+                            localError = "Vui lòng nhập đủ nhà trọ, mã phòng, người thuê, ngày bắt đầu và kết thúc."
                         } else onSave(roomId.trim(), tenantUsername.trim(), startDate.trim(), endDate.trim(), deposit.trim(), note.trim(), status.trim())
                     }
                     .padding(horizontal = 20.dp, vertical = 10.dp)
@@ -251,6 +306,14 @@ internal fun RenewRequestDialog(contract: RentalItem, onDismiss: () -> Unit, onS
     var newEndDate by remember(contract) { mutableStateOf(contract.detail("endDate")) }
     var note by remember(contract) { mutableStateOf("Mình muốn gia hạn hợp đồng này.") }
     var localError by remember { mutableStateOf<String?>(null) }
+    
+    val context = androidx.compose.ui.platform.LocalContext.current
+    val calendar = java.util.Calendar.getInstance()
+    val datePickerDialog = android.app.DatePickerDialog(
+        context,
+        { _, year, month, dayOfMonth -> newEndDate = String.format("%02d/%02d/%04d", dayOfMonth, month + 1, year) },
+        calendar.get(java.util.Calendar.YEAR), calendar.get(java.util.Calendar.MONTH), calendar.get(java.util.Calendar.DAY_OF_MONTH)
+    )
 
     val fieldColors = OutlinedTextFieldDefaults.colors(
         focusedTextColor = Color.White, unfocusedTextColor = Color.White,
@@ -265,12 +328,15 @@ internal fun RenewRequestDialog(contract: RentalItem, onDismiss: () -> Unit, onS
             Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
                 DetailRow("Hợp đồng", contract.title)
                 DetailRow("Ngày kết thúc hiện tại", contract.detail("endDate").ifBlank { contract.value })
-                OutlinedTextField(
-                    value = newEndDate, onValueChange = { newEndDate = it },
-                    label = { Text("Ngày kết thúc mới") },
-                    modifier = Modifier.fillMaxWidth(), singleLine = true,
-                    shape = CutCornerShape(8.dp), colors = fieldColors
-                )
+                Box {
+                    OutlinedTextField(
+                        value = newEndDate, onValueChange = {}, readOnly = true,
+                        label = { Text("Ngày kết thúc mới") },
+                        modifier = Modifier.fillMaxWidth().clickable { datePickerDialog.show() }, singleLine = true,
+                        shape = CutCornerShape(8.dp), colors = fieldColors, enabled = false
+                    )
+                    Box(modifier = Modifier.matchParentSize().clickable { datePickerDialog.show() })
+                }
                 OutlinedTextField(
                     value = note, onValueChange = { note = it },
                     label = { Text("Ghi chú") },
@@ -300,8 +366,16 @@ internal fun RenewRequestDialog(contract: RentalItem, onDismiss: () -> Unit, onS
 
 @Composable
 internal fun RentRequestDialog(room: RentalItem, onDismiss: () -> Unit, onSubmit: (String, String) -> Unit) {
-    var duration by remember(room) { mutableStateOf("6 tháng") }
+    var endDate by remember(room) { mutableStateOf("") }
     var note by remember(room) { mutableStateOf("Mình muốn thuê phòng này.") }
+    
+    val context = androidx.compose.ui.platform.LocalContext.current
+    val calendar = java.util.Calendar.getInstance()
+    val datePickerDialog = android.app.DatePickerDialog(
+        context,
+        { _, year, month, dayOfMonth -> endDate = String.format("%02d/%02d/%04d", dayOfMonth, month + 1, year) },
+        calendar.get(java.util.Calendar.YEAR), calendar.get(java.util.Calendar.MONTH), calendar.get(java.util.Calendar.DAY_OF_MONTH)
+    )
 
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -311,12 +385,15 @@ internal fun RentRequestDialog(room: RentalItem, onDismiss: () -> Unit, onSubmit
             Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
                 DetailRow("Phòng cần thuê", room.title)
                 DetailRow("Giá thuê", room.value)
-                OutlinedTextField(
-                    value = duration, onValueChange = { duration = it },
-                    label = { Text("Thời hạn mong muốn") },
-                    modifier = Modifier.fillMaxWidth(), singleLine = true,
-                    shape = RoundedCornerShape(8.dp)
-                )
+                Box {
+                    OutlinedTextField(
+                        value = endDate, onValueChange = {}, readOnly = true,
+                        label = { Text("Ngày dự kiến chuyển đi") },
+                        modifier = Modifier.fillMaxWidth().clickable { datePickerDialog.show() }, singleLine = true,
+                        shape = RoundedCornerShape(8.dp), enabled = false
+                    )
+                    Box(modifier = Modifier.matchParentSize().clickable { datePickerDialog.show() })
+                }
                 OutlinedTextField(
                     value = note, onValueChange = { note = it },
                     label = { Text("Ghi chú thêm") },
@@ -327,7 +404,7 @@ internal fun RentRequestDialog(room: RentalItem, onDismiss: () -> Unit, onSubmit
         },
         confirmButton = {
             Button(
-                onClick = { onSubmit(duration, note) },
+                onClick = { onSubmit(if (endDate.isBlank()) "Không xác định" else "Đến $endDate", note) },
                 shape = RoundedCornerShape(8.dp),
                 colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF0F766E))
             ) {
@@ -396,12 +473,14 @@ internal fun HouseFormDialog(item: RentalItem, onDismiss: () -> Unit, onSave: (R
 }
 
 @Composable
-internal fun RoomTypeFormDialog(item: RentalItem, onDismiss: () -> Unit, onSave: (RentalItem) -> Unit) {
+internal fun RoomTypeFormDialog(item: RentalItem, houses: List<RentalItem>, onDismiss: () -> Unit, onSave: (RentalItem) -> Unit) {
     var name by remember(item) { mutableStateOf(item.title) }
     var priceRange by remember(item) { mutableStateOf(item.value) }
+    var selectedHouseId by remember(item) { mutableStateOf(item.detail("houseId")) }
     var note by remember(item) { mutableStateOf(item.note) }
     var status by remember(item) { mutableStateOf(item.status.ifBlank { "Đang dùng" }) }
     var error by remember { mutableStateOf<String?>(null) }
+    var houseExpanded by remember { mutableStateOf(false) }
 
     val fieldColors = OutlinedTextFieldDefaults.colors(
         focusedTextColor = Color.White, unfocusedTextColor = Color.White,
@@ -414,6 +493,24 @@ internal fun RoomTypeFormDialog(item: RentalItem, onDismiss: () -> Unit, onSave:
         title = { Text(if (item.id.isBlank()) "Thêm loại phòng" else "Sửa loại phòng", fontWeight = FontWeight.Bold, color = Color.White) },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                Box {
+                    OutlinedTextField(
+                        value = houses.find { it.id == selectedHouseId }?.let { "${it.id} - ${it.title}" } ?: "Chọn nhà trọ...",
+                        onValueChange = {}, readOnly = true,
+                        label = { Text("Nhà trọ *") },
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = CutCornerShape(8.dp), colors = fieldColors
+                    )
+                    Box(modifier = Modifier.matchParentSize().clickable { houseExpanded = true })
+                    DropdownMenu(expanded = houseExpanded, onDismissRequest = { houseExpanded = false }) {
+                        houses.forEach { house ->
+                            DropdownMenuItem(
+                                text = { Text("${house.id} - ${house.title}") },
+                                onClick = { selectedHouseId = house.id; houseExpanded = false }
+                            )
+                        }
+                    }
+                }
                 OutlinedTextField(value = name, onValueChange = { name = it }, label = { Text("Tên loại phòng *") }, modifier = Modifier.fillMaxWidth(), singleLine = true, shape = CutCornerShape(8.dp), colors = fieldColors)
                 OutlinedTextField(value = priceRange, onValueChange = { priceRange = it }, label = { Text("Khoảng giá (VD: 2.000.000đ - 3.500.000đ)") }, modifier = Modifier.fillMaxWidth(), singleLine = true, shape = CutCornerShape(8.dp), colors = fieldColors)
                 Text("Trạng thái", style = MaterialTheme.typography.labelMedium, color = Color(0xFF34D399))
@@ -467,6 +564,7 @@ internal fun RoomFormDialog(
     var note by remember(item) { mutableStateOf(item.note) }
     var status by remember(item) { mutableStateOf(item.status.ifBlank { "Còn trống" }) }
     var error by remember { mutableStateOf<String?>(null) }
+    var houseExpanded by remember { mutableStateOf(false) }
 
     val fieldColors = OutlinedTextFieldDefaults.colors(
         focusedTextColor = Color.White, unfocusedTextColor = Color.White,
@@ -481,24 +579,22 @@ internal fun RoomFormDialog(
             LazyColumn(verticalArrangement = Arrangement.spacedBy(12.dp)) {
                 item { OutlinedTextField(value = name, onValueChange = { name = it }, label = { Text("Tên phòng * (VD: Phòng A01)") }, modifier = Modifier.fillMaxWidth(), singleLine = true, shape = CutCornerShape(8.dp), colors = fieldColors) }
                 item {
-                    if (houses.isNotEmpty()) {
-                        Text("Nhà trọ *", style = MaterialTheme.typography.labelMedium, color = Color(0xFF34D399))
-                        Spacer(Modifier.height(4.dp))
-                        LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                            items(houses) { house ->
-                                val active = houseId == house.id
-                                Box(
-                                    modifier = Modifier
-                                        .clip(CutCornerShape(8.dp))
-                                        .background(if (active) Color(0xFF34D399).copy(alpha = 0.2f) else Color.Transparent)
-                                        .border(1.dp, if (active) Color(0xFF34D399) else Color.White.copy(alpha = 0.3f), CutCornerShape(8.dp))
-                                        .clickable { houseId = house.id }
-                                        .padding(horizontal = 12.dp, vertical = 6.dp)
-                                ) { Text("${house.title} (${house.id})", color = if (active) Color(0xFF34D399) else Color.White.copy(alpha = 0.7f), fontSize = 12.sp, fontWeight = if (active) FontWeight.Bold else FontWeight.Normal) }
+                    Box {
+                        OutlinedTextField(
+                            value = houses.find { it.id == houseId }?.let { "${it.id} - ${it.title}" } ?: "Chọn nhà trọ...",
+                            onValueChange = {}, readOnly = true,
+                            label = { Text("Nhà trọ *") }, modifier = Modifier.fillMaxWidth().clickable { houseExpanded = true },
+                            singleLine = true, shape = CutCornerShape(8.dp), colors = fieldColors, enabled = false
+                        )
+                        Box(modifier = Modifier.matchParentSize().clickable { houseExpanded = true })
+                        DropdownMenu(expanded = houseExpanded, onDismissRequest = { houseExpanded = false }) {
+                            houses.forEach { house ->
+                                DropdownMenuItem(
+                                    text = { Text("${house.id} - ${house.title}") },
+                                    onClick = { houseId = house.id; houseExpanded = false }
+                                )
                             }
                         }
-                    } else {
-                        OutlinedTextField(value = houseId, onValueChange = { houseId = it }, label = { Text("Mã nhà trọ * (VD: NT001)") }, modifier = Modifier.fillMaxWidth(), singleLine = true, shape = CutCornerShape(8.dp), colors = fieldColors)
                     }
                 }
                 item { OutlinedTextField(value = price, onValueChange = { price = it }, label = { Text("Giá thuê phòng * (VNĐ)") }, modifier = Modifier.fillMaxWidth(), singleLine = true, shape = CutCornerShape(8.dp), colors = fieldColors) }
@@ -556,14 +652,20 @@ internal fun RoomFormDialog(
 }
 
 @Composable
-internal fun ServiceFormDialog(item: RentalItem, onDismiss: () -> Unit, onSave: (RentalItem) -> Unit) {
+internal fun ServiceFormDialog(item: RentalItem, houses: List<RentalItem>, rooms: List<RentalItem>, onDismiss: () -> Unit, onSave: (RentalItem) -> Unit) {
     var name by remember(item) { mutableStateOf(item.title) }
-    var unitPrice by remember(item) { mutableStateOf(item.value) }
-    var unit by remember(item) { mutableStateOf(item.detail("unit").ifBlank { "tháng" }) }
-    var houseId by remember(item) { mutableStateOf(item.detail("houseId")) }
+    var price by remember(item) { mutableStateOf(item.value) }
+    var selectedHouseId by remember(item) { mutableStateOf(item.detail("houseId")) }
+    var selectedRoomId by remember(item) { mutableStateOf(item.detail("roomId")) }
     var note by remember(item) { mutableStateOf(item.note) }
-    var status by remember(item) { mutableStateOf(item.status.ifBlank { "TinhPhi" }) }
+    var status by remember(item) { mutableStateOf(item.status.ifBlank { "Tiện ích nhà trọ" }) }
     var error by remember { mutableStateOf<String?>(null) }
+
+    var houseExpanded by remember { mutableStateOf(false) }
+    var roomExpanded by remember { mutableStateOf(false) }
+    var statusExpanded by remember { mutableStateOf(false) }
+
+    val filteredRooms = remember(selectedHouseId, rooms) { rooms.filter { it.detail("houseId") == selectedHouseId } }
 
     val fieldColors = OutlinedTextFieldDefaults.colors(
         focusedTextColor = Color.White, unfocusedTextColor = Color.White,
@@ -576,37 +678,62 @@ internal fun ServiceFormDialog(item: RentalItem, onDismiss: () -> Unit, onSave: 
         title = { Text(if (item.id.isBlank()) "Thêm dịch vụ" else "Sửa dịch vụ", fontWeight = FontWeight.Bold, color = Color.White) },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                OutlinedTextField(value = houseId, onValueChange = { houseId = it }, label = { Text("Mã nhà trọ * (VD: NT001)") }, modifier = Modifier.fillMaxWidth(), singleLine = true, shape = CutCornerShape(8.dp), colors = fieldColors)
+                Box {
+                    OutlinedTextField(
+                        value = houses.find { it.id == selectedHouseId }?.let { "${it.id} - ${it.title}" } ?: "Chọn nhà trọ...",
+                        onValueChange = {}, readOnly = true,
+                        label = { Text("Nhà trọ *") },
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = CutCornerShape(8.dp), colors = fieldColors
+                    )
+                    Box(modifier = Modifier.matchParentSize().clickable { houseExpanded = true })
+                    DropdownMenu(expanded = houseExpanded, onDismissRequest = { houseExpanded = false }) {
+                        houses.forEach { house ->
+                            DropdownMenuItem(
+                                text = { Text("${house.id} - ${house.title}") },
+                                onClick = { selectedHouseId = house.id; selectedRoomId = ""; houseExpanded = false }
+                            )
+                        }
+                    }
+                }
+                Box {
+                    OutlinedTextField(
+                        value = filteredRooms.find { it.id == selectedRoomId }?.let { "${it.id} - ${it.title}" } ?: "Chọn phòng trọ...",
+                        onValueChange = {}, readOnly = true,
+                        label = { Text("Phòng trọ *") },
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = CutCornerShape(8.dp), colors = fieldColors
+                    )
+                    Box(modifier = Modifier.matchParentSize().clickable { roomExpanded = true })
+                    DropdownMenu(expanded = roomExpanded, onDismissRequest = { roomExpanded = false }) {
+                        filteredRooms.forEach { room ->
+                            DropdownMenuItem(
+                                text = { Text("${room.id} - ${room.title}") },
+                                onClick = { selectedRoomId = room.id; roomExpanded = false }
+                            )
+                        }
+                    }
+                }
+                Box {
+                    OutlinedTextField(
+                        value = status,
+                        onValueChange = {}, readOnly = true,
+                        label = { Text("Loại dịch vụ *") },
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = CutCornerShape(8.dp), colors = fieldColors
+                    )
+                    Box(modifier = Modifier.matchParentSize().clickable { statusExpanded = true })
+                    DropdownMenu(expanded = statusExpanded, onDismissRequest = { statusExpanded = false }) {
+                        listOf("Tiện ích nhà trọ", "Dịch vụ tính phí", "Tiện nghi phòng").forEach { s ->
+                            DropdownMenuItem(
+                                text = { Text(s) },
+                                onClick = { status = s; statusExpanded = false }
+                            )
+                        }
+                    }
+                }
                 OutlinedTextField(value = name, onValueChange = { name = it }, label = { Text("Tên dịch vụ * (VD: Internet, Rác...)") }, modifier = Modifier.fillMaxWidth(), singleLine = true, shape = CutCornerShape(8.dp), colors = fieldColors)
-                OutlinedTextField(value = unitPrice, onValueChange = { unitPrice = it }, label = { Text("Đơn giá *") }, modifier = Modifier.fillMaxWidth(), singleLine = true, shape = CutCornerShape(8.dp), colors = fieldColors)
-                Text("Đơn vị tính", style = MaterialTheme.typography.labelMedium, color = Color(0xFF34D399))
-                LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    items(listOf("tháng", "phòng", "người", "kWh", "m3")) { u ->
-                        val active = unit == u
-                        Box(
-                            modifier = Modifier
-                                .clip(CutCornerShape(8.dp))
-                                .background(if (active) Color(0xFF34D399).copy(alpha = 0.2f) else Color.Transparent)
-                                .border(1.dp, if (active) Color(0xFF34D399) else Color.White.copy(alpha = 0.3f), CutCornerShape(8.dp))
-                                .clickable { unit = u }
-                                .padding(horizontal = 12.dp, vertical = 6.dp)
-                        ) { Text(u, color = if (active) Color(0xFF34D399) else Color.White.copy(alpha = 0.7f), fontSize = 12.sp, fontWeight = if (active) FontWeight.Bold else FontWeight.Normal) }
-                    }
-                }
-                Text("Trạng thái", style = MaterialTheme.typography.labelMedium, color = Color(0xFF34D399))
-                LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    items(listOf("TienIch", "TienNghi", "TinhPhi")) { s ->
-                        val active = status == s
-                        Box(
-                            modifier = Modifier
-                                .clip(CutCornerShape(8.dp))
-                                .background(if (active) Color(0xFF34D399).copy(alpha = 0.2f) else Color.Transparent)
-                                .border(1.dp, if (active) Color(0xFF34D399) else Color.White.copy(alpha = 0.3f), CutCornerShape(8.dp))
-                                .clickable { status = s }
-                                .padding(horizontal = 12.dp, vertical = 6.dp)
-                        ) { Text(s, color = if (active) Color(0xFF34D399) else Color.White.copy(alpha = 0.7f), fontSize = 12.sp, fontWeight = if (active) FontWeight.Bold else FontWeight.Normal) }
-                    }
-                }
+                OutlinedTextField(value = price, onValueChange = { price = it }, label = { Text("Đơn giá (VNĐ/tháng) *") }, modifier = Modifier.fillMaxWidth(), singleLine = true, shape = CutCornerShape(8.dp), colors = fieldColors)
                 OutlinedTextField(value = note, onValueChange = { note = it }, label = { Text("Ghi chú") }, modifier = Modifier.fillMaxWidth(), minLines = 2, shape = CutCornerShape(8.dp), colors = fieldColors)
                 error?.let { Text(it, color = Color(0xFFFCA5A5), style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.Medium) }
             }
@@ -618,11 +745,13 @@ internal fun ServiceFormDialog(item: RentalItem, onDismiss: () -> Unit, onSave: 
                     .background(Brush.horizontalGradient(listOf(Color(0xFF0F766E), Color(0xFF0369A1))))
                     .clickable {
                         when {
+                            selectedHouseId.isBlank() -> error = "Vui lòng chọn nhà trọ."
+                            selectedRoomId.isBlank() -> error = "Vui lòng chọn phòng trọ."
                             name.isBlank() -> error = "Tên dịch vụ không được để trống."
-                            unitPrice.isBlank() -> error = "Đơn giá không được để trống."
+                            price.isBlank() -> error = "Đơn giá không được để trống."
                             else -> {
-                                val newDetails = item.details.filterNot { it.first == "unit" } + ("unit" to unit)
-                                onSave(item.copy(title = name.trim(), status = status, value = unitPrice.trim(), note = note.trim(), details = newDetails))
+                                val newDetails = item.details.filterNot { it.first == "houseId" || it.first == "roomId" || it.first == "unit" } + ("houseId" to selectedHouseId) + ("roomId" to selectedRoomId)
+                                onSave(item.copy(title = name.trim(), status = status, value = price.trim(), note = note.trim(), details = newDetails))
                             }
                         }
                     }
@@ -640,11 +769,13 @@ internal fun ServiceFormDialog(item: RentalItem, onDismiss: () -> Unit, onSave: 
 internal fun UtilityReadingFormDialog(
     screen: AppScreen,
     item: RentalItem,
+    houses: List<RentalItem>,
     rooms: List<RentalItem>,
     onDismiss: () -> Unit,
     onSaveUtility: (AppScreen, String, String, Double, Double, Double) -> Unit,
     repository: RentalRepository
 ) {
+    var selectedHouseId by remember(item) { mutableStateOf(item.detail("houseId")) }
     var roomId by remember(item) { mutableStateOf(item.detail("roomId")) }
     var period by remember(item) { mutableStateOf(item.detail("period").ifBlank { "2026-06" }) }
     var oldIndex by remember(item) { mutableStateOf(item.detail("oldIndex").toDoubleOrNull() ?: 0.0) }
@@ -653,6 +784,10 @@ internal fun UtilityReadingFormDialog(
     var priceStr by remember(item) { mutableStateOf(item.detail("price").ifBlank { defaultPrice.toLong().toString() }) }
     var error by remember { mutableStateOf<String?>(null) }
     var loadingOldIndex by remember { mutableStateOf(false) }
+    
+    var houseExpanded by remember { mutableStateOf(false) }
+    var roomExpanded by remember { mutableStateOf(false) }
+    val filteredRooms = remember(selectedHouseId, rooms) { rooms.filter { it.detail("houseId") == selectedHouseId } }
 
     LaunchedEffect(roomId) {
         if (roomId.isNotBlank() && item.id.isBlank()) {
@@ -676,24 +811,41 @@ internal fun UtilityReadingFormDialog(
         text = {
             LazyColumn(verticalArrangement = Arrangement.spacedBy(12.dp)) {
                 item {
-                    if (rooms.isNotEmpty()) {
-                        Text("Chọn phòng *", style = MaterialTheme.typography.labelMedium, color = Color(0xFF34D399))
-                        Spacer(Modifier.height(4.dp))
-                        LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                            items(rooms) { room ->
-                                val active = roomId == room.id
-                                Box(
-                                    modifier = Modifier
-                                        .clip(CutCornerShape(8.dp))
-                                        .background(if (active) Color(0xFF34D399).copy(alpha = 0.2f) else Color.Transparent)
-                                        .border(1.dp, if (active) Color(0xFF34D399) else Color.White.copy(alpha = 0.3f), CutCornerShape(8.dp))
-                                        .clickable { roomId = room.id }
-                                        .padding(horizontal = 12.dp, vertical = 6.dp)
-                                ) { Text(room.title, color = if (active) Color(0xFF34D399) else Color.White.copy(alpha = 0.7f), fontSize = 12.sp, fontWeight = if (active) FontWeight.Bold else FontWeight.Normal) }
+                    Box {
+                        OutlinedTextField(
+                            value = houses.find { it.id == selectedHouseId }?.let { "${it.id} - ${it.title}" } ?: "Chọn nhà trọ...",
+                            onValueChange = {}, readOnly = true,
+                            label = { Text("Nhà trọ *") }, modifier = Modifier.fillMaxWidth().clickable { houseExpanded = true },
+                            singleLine = true, shape = CutCornerShape(8.dp), colors = fieldColors, enabled = false
+                        )
+                        Box(modifier = Modifier.matchParentSize().clickable { houseExpanded = true })
+                        DropdownMenu(expanded = houseExpanded, onDismissRequest = { houseExpanded = false }) {
+                            houses.forEach { house ->
+                                DropdownMenuItem(
+                                    text = { Text("${house.id} - ${house.title}") },
+                                    onClick = { selectedHouseId = house.id; roomId = ""; houseExpanded = false }
+                                )
                             }
                         }
-                    } else {
-                        OutlinedTextField(value = roomId, onValueChange = { roomId = it }, label = { Text("Mã phòng * (VD: P101)") }, modifier = Modifier.fillMaxWidth(), singleLine = true, shape = CutCornerShape(8.dp), colors = fieldColors)
+                    }
+                }
+                item {
+                    Box {
+                        OutlinedTextField(
+                            value = filteredRooms.find { it.id == roomId }?.let { "${it.id} - ${it.title}" } ?: "Chọn phòng trọ...",
+                            onValueChange = {}, readOnly = true,
+                            label = { Text("Phòng trọ *") }, modifier = Modifier.fillMaxWidth().clickable { roomExpanded = true },
+                            singleLine = true, shape = CutCornerShape(8.dp), colors = fieldColors, enabled = false
+                        )
+                        Box(modifier = Modifier.matchParentSize().clickable { roomExpanded = true })
+                        DropdownMenu(expanded = roomExpanded, onDismissRequest = { roomExpanded = false }) {
+                            filteredRooms.forEach { room ->
+                                DropdownMenuItem(
+                                    text = { Text("${room.id} - ${room.title}") },
+                                    onClick = { roomId = room.id; roomExpanded = false }
+                                )
+                            }
+                        }
                     }
                 }
                 item { OutlinedTextField(value = period, onValueChange = { period = it }, label = { Text("Kỳ ghi chỉ số * (VD: 2026-06)") }, modifier = Modifier.fillMaxWidth(), singleLine = true, shape = CutCornerShape(8.dp), colors = fieldColors) }
@@ -737,16 +889,23 @@ internal fun UtilityReadingFormDialog(
 @Composable
 internal fun InvoiceFormDialog(
     item: RentalItem,
+    houses: List<RentalItem>,
     rooms: List<RentalItem>,
     onDismiss: () -> Unit,
     onSaveInvoice: (String, String, Double, String) -> Unit
 ) {
+    var selectedHouseId by remember(item) { mutableStateOf(item.detail("houseId")) }
     var roomId by remember(item) { mutableStateOf(item.detail("roomId")) }
     var period by remember(item) { mutableStateOf(item.detail("period").ifBlank { "2026-06" }) }
     var otherCostStr by remember(item) { mutableStateOf(item.detail("otherCost").ifBlank { "0" }) }
     var otherNote by remember(item) { mutableStateOf(item.detail("otherNote")) }
     var error by remember { mutableStateOf<String?>(null) }
+    
+    var houseExpanded by remember { mutableStateOf(false) }
+    var roomExpanded by remember { mutableStateOf(false) }
 
+    val filteredRooms = remember(selectedHouseId, rooms) { rooms.filter { it.detail("houseId") == selectedHouseId && (it.status.equals("Đã thuê", true) || it.detail("tenantUsername").isNotBlank()) } }
+    
     val selectedRoom = rooms.firstOrNull { it.id == roomId }
 
     AlertDialog(
@@ -761,30 +920,44 @@ internal fun InvoiceFormDialog(
         text = {
             LazyColumn(verticalArrangement = Arrangement.spacedBy(12.dp)) {
                 item {
-                    if (rooms.isNotEmpty()) {
-                        val rentedRooms = rooms.filter { it.status.equals("Đã thuê", true) || it.detail("tenantUsername").isNotBlank() }
-                        Text("Chọn phòng thuê *", style = MaterialTheme.typography.labelMedium, color = Color(0xFF64748B))
-                        Spacer(Modifier.height(4.dp))
-                        LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                            items(rentedRooms) { room ->
-                                FilterChip(
-                                    selected = roomId == room.id,
-                                    onClick = { roomId = room.id },
-                                    label = { Text("${room.title} (${room.id})") },
-                                    shape = RoundedCornerShape(8.dp)
+                    Box {
+                        OutlinedTextField(
+                            value = houses.find { it.id == selectedHouseId }?.let { "${it.id} - ${it.title}" } ?: "Chọn nhà trọ...",
+                            onValueChange = {}, readOnly = true,
+                            label = { Text("Nhà trọ *") }, modifier = Modifier.fillMaxWidth().clickable { houseExpanded = true },
+                            singleLine = true, shape = RoundedCornerShape(8.dp)
+                        )
+                        Box(modifier = Modifier.matchParentSize().clickable { houseExpanded = true })
+                        DropdownMenu(expanded = houseExpanded, onDismissRequest = { houseExpanded = false }) {
+                            houses.forEach { house ->
+                                DropdownMenuItem(
+                                    text = { Text("${house.id} - ${house.title}") },
+                                    onClick = { selectedHouseId = house.id; roomId = ""; houseExpanded = false }
                                 )
                             }
                         }
-                        if (rentedRooms.isEmpty()) {
-                            Text("Không có phòng nào đang được thuê.", color = Color(0xFFEF4444), style = MaterialTheme.typography.bodySmall)
-                        }
-                    } else {
+                    }
+                }
+                item {
+                    Box {
                         OutlinedTextField(
-                            value = roomId, onValueChange = { roomId = it },
-                            label = { Text("Mã phòng * (VD: P101)") },
-                            modifier = Modifier.fillMaxWidth(), singleLine = true,
-                            shape = RoundedCornerShape(8.dp)
+                            value = filteredRooms.find { it.id == roomId }?.let { "${it.id} - ${it.title}" } ?: "Chọn phòng thuê...",
+                            onValueChange = {}, readOnly = true,
+                            label = { Text("Phòng thuê *") }, modifier = Modifier.fillMaxWidth().clickable { roomExpanded = true },
+                            singleLine = true, shape = RoundedCornerShape(8.dp)
                         )
+                        Box(modifier = Modifier.matchParentSize().clickable { roomExpanded = true })
+                        DropdownMenu(expanded = roomExpanded, onDismissRequest = { roomExpanded = false }) {
+                            filteredRooms.forEach { room ->
+                                DropdownMenuItem(
+                                    text = { Text("${room.id} - ${room.title}") },
+                                    onClick = { roomId = room.id; roomExpanded = false }
+                                )
+                            }
+                        }
+                    }
+                    if (selectedHouseId.isNotBlank() && filteredRooms.isEmpty()) {
+                        Text("Nhà trọ này không có phòng nào đang được thuê.", color = Color(0xFFEF4444), style = MaterialTheme.typography.bodySmall)
                     }
                 }
                 item {
@@ -844,6 +1017,7 @@ internal fun InvoiceFormDialog(
                 onClick = {
                     val otherCost = otherCostStr.toDoubleOrNull() ?: 0.0
                     when {
+                        selectedHouseId.isBlank() -> error = "Vui lòng chọn nhà trọ."
                         roomId.isBlank() -> error = "Vui lòng chọn phòng."
                         period.isBlank() -> error = "Vui lòng nhập kỳ hóa đơn."
                         otherCostStr.isNotBlank() && otherCostStr.toDoubleOrNull() == null -> error = "Chi phí phát sinh phải là số hợp lệ."
@@ -1168,13 +1342,21 @@ internal fun DetailDialog(item: RentalItem, screen: AppScreen, onDismiss: () -> 
 @Composable
 internal fun IncidentFormDialog(
     item: RentalItem,
+    houses: List<RentalItem>,
+    rooms: List<RentalItem>,
     onDismiss: () -> Unit,
     onSave: (RentalItem) -> Unit
 ) {
+    var selectedHouseId by remember(item) { mutableStateOf(item.detail("houseId")) }
+    var selectedRoomId by remember(item) { mutableStateOf(item.detail("roomId")) }
     var title by remember(item) { mutableStateOf(item.title) }
     var description by remember(item) { mutableStateOf(item.note) }
     var urgency by remember(item) { mutableStateOf(item.value.ifBlank { "Bình thường" }) }
     var error by remember { mutableStateOf<String?>(null) }
+    
+    var houseExpanded by remember { mutableStateOf(false) }
+    var roomExpanded by remember { mutableStateOf(false) }
+    val filteredRooms = remember(selectedHouseId, rooms) { rooms.filter { it.detail("houseId") == selectedHouseId } }
 
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -1187,6 +1369,40 @@ internal fun IncidentFormDialog(
         },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                Box {
+                    OutlinedTextField(
+                        value = houses.find { it.id == selectedHouseId }?.let { "${it.id} - ${it.title}" } ?: "Chọn nhà trọ...",
+                        onValueChange = {}, readOnly = true,
+                        label = { Text("Nhà trọ *") }, modifier = Modifier.fillMaxWidth().clickable { houseExpanded = true },
+                        singleLine = true, shape = RoundedCornerShape(8.dp)
+                    )
+                    Box(modifier = Modifier.matchParentSize().clickable { houseExpanded = true })
+                    DropdownMenu(expanded = houseExpanded, onDismissRequest = { houseExpanded = false }) {
+                        houses.forEach { house ->
+                            DropdownMenuItem(
+                                text = { Text("${house.id} - ${house.title}") },
+                                onClick = { selectedHouseId = house.id; selectedRoomId = ""; houseExpanded = false }
+                            )
+                        }
+                    }
+                }
+                Box {
+                    OutlinedTextField(
+                        value = filteredRooms.find { it.id == selectedRoomId }?.let { "${it.id} - ${it.title}" } ?: "Chọn phòng trọ...",
+                        onValueChange = {}, readOnly = true,
+                        label = { Text("Phòng trọ *") }, modifier = Modifier.fillMaxWidth().clickable { roomExpanded = true },
+                        singleLine = true, shape = RoundedCornerShape(8.dp)
+                    )
+                    Box(modifier = Modifier.matchParentSize().clickable { roomExpanded = true })
+                    DropdownMenu(expanded = roomExpanded, onDismissRequest = { roomExpanded = false }) {
+                        filteredRooms.forEach { room ->
+                            DropdownMenuItem(
+                                text = { Text("${room.id} - ${room.title}") },
+                                onClick = { selectedRoomId = room.id; roomExpanded = false }
+                            )
+                        }
+                    }
+                }
                 OutlinedTextField(
                     value = title, onValueChange = { title = it },
                     label = { Text("Tiêu đề sự cố *") },
@@ -1217,16 +1433,22 @@ internal fun IncidentFormDialog(
             Button(
                 onClick = {
                     when {
+                        selectedHouseId.isBlank() -> error = "Vui lòng chọn nhà trọ."
+                        selectedRoomId.isBlank() -> error = "Vui lòng chọn phòng trọ."
                         title.isBlank() -> error = "Vui lòng nhập tiêu đề sự cố."
                         description.isBlank() -> error = "Vui lòng mô tả chi tiết sự cố."
-                        else -> onSave(
-                            item.copy(
-                                title = title.trim(),
-                                status = "Mới",
-                                value = urgency,
-                                note = description.trim()
+                        else -> {
+                            val newDetails = item.details.filterNot { it.first == "houseId" || it.first == "roomId" } + ("houseId" to selectedHouseId) + ("roomId" to selectedRoomId)
+                            onSave(
+                                item.copy(
+                                    title = title.trim(),
+                                    status = "Mới",
+                                    value = urgency,
+                                    note = description.trim(),
+                                    details = newDetails
+                                )
                             )
-                        )
+                        }
                     }
                 },
                 shape = RoundedCornerShape(8.dp),
